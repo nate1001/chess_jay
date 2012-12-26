@@ -3,7 +3,7 @@
 ChessJay
 ========
 
-Python PyQT chess viewer.
+Python PyQT chess game viewer / player.
 
 
 * Uses PyQT for viewing / playing chess games.
