@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://web.resource.org/cc/"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   id="svg2295"
+   sodipodi:version="0.32"
+   inkscape:version="0.45.1"
+   height='80'
+   width='80'
+   version="1.0"
+   sodipodi:docbase="/home/fkling/2/v0.1.2reduced/PieceThemes/Neu"
+   sodipodi:docname="bp.svg"
+   inkscape:output_extension="org.inkscape.output.svg.inkscape">
+  <defs
+     id="defs2297" />
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="11.2"
+     inkscape:cx="51.690147"
+     inkscape:cy="55.427269"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     width="80px"
+     height="80px"
+     showgrid="true"
+     inkscape:window-width="944"
+     inkscape:window-height="621"
+     inkscape:window-x="209"
+     inkscape:window-y="219" />
+  <metadata
+     id="metadata2300">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Ebene 1"
+     inkscape:groupmode="layer"
+     id="layer1">
+    <path
+       transform="matrix(6.5721793,0,0,6.5721793,-52.807531,-37.476718)"
+       style="font-size:12px;font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;text-align:start;line-height:100%;writing-mode:lr-tb;text-anchor:start;font-family:GC2004D;fill:#1f1a17;fill-opacity:1"
+       d="M 17.69375,16.787893 L 10.49375,16.787893 C 10.473748,16.159892 10.717747,15.703892 11.22575,15.419893 C 11.621746,15.199892 12.157746,15.091893 12.83375,15.095893 L 12.86975,14.585893 C 12.621745,14.449893 12.497746,14.179893 12.49775,13.775893 C 12.497746,13.267894 12.713745,12.615895 13.14575,11.819893 L 13.14575,11.033893 L 10.97975,11.033893 C 10.947747,10.797897 11.009747,10.529897 11.16575,10.229893 C 11.560331,9.3729102 12.591126,9.3581053 13.22375,8.8258926 C 13.139745,8.697899 13.087745,8.6118991 13.06775,8.5678926 C 13.015745,8.4598992 12.987745,8.3658993 12.98375,8.2858926 C 12.975745,7.9898997 13.083745,7.7398999 13.30775,7.5358926 C 13.531745,7.3279003 13.793744,7.2239004 14.09375,7.2238926 C 14.389744,7.2239004 14.649743,7.3279003 14.87375,7.5358926 C 15.101743,7.7398999 15.211743,7.9898997 15.20375,8.2858926 C 15.195743,8.5538991 15.115743,8.7338989 14.96375,8.8258926 C 15.003743,8.9898987 15.249743,9.1318985 15.70175,9.2518926 C 16.717741,9.5238981 17.225741,10.055898 17.22575,10.847893 C 17.225741,10.927897 17.219741,10.989897 17.20775,11.033893 L 15.04175,11.033893 L 15.04175,11.819893 C 15.477743,12.615895 15.695742,13.267894 15.69575,13.775893 C 15.695742,14.179893 15.569743,14.449893 15.31775,14.585893 L 15.35375,15.095893 C 16.273742,15.087893 16.931741,15.289892 17.32775,15.701893 C 17.579741,15.965892 17.70574,16.279891 17.70575,16.643893 C 17.70574,16.703891 17.70174,16.751891 17.69375,16.787893"
+       id="flowRoot2160"
+       sodipodi:nodetypes="cccccscccccsccscsccscccscccsc" />
+  </g>
+</svg>

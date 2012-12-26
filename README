@@ -1,0 +1,13 @@
+
+
+ChessJay
+========
+
+Python PyQT chess viewer.
+
+
+* Uses PyQT for viewing / playing chess games.
+
+* Can connect to Postgresql Chess Database ChessCrow to view games
+
+
