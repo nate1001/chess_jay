@@ -3,15 +3,20 @@ Copyright Nate Carson 2012
 
 '''
 
+import os
+
 from PyQt4 import QtGui, QtCore
+
+dbname = 'chess'
+lib = '/../build/lib'
+media_piece = '/media/pieces/'
+dbchesslib = os.getcwd() + lib
 
 COLOR_NONE = QtGui.QColor(0,0,0,0)
 
 square_size = 60
 board_size = square_size * 8
 
-dbname = 'chess'
-dbchesslib = '/home/muskrat/src/chess/trunk/src/build/lib'
 
 
 keys = {
@@ -35,7 +40,7 @@ keys = {
 
 
 
-piece_directory = '/home/muskrat/src/chess/trunk/src/gui/media/pieces'
+piece_directory = os.getcwd() + media_piece
 chess_font = 'Internet'
 square_label_color = QtGui.QColor('red')
 square_light_color = QtGui.QColor('white')

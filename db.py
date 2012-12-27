@@ -14,6 +14,11 @@ class Conn(object):
 	def __init__(self):
 		self.conn = psycopg2.connect('dbname=' + settings.dbname)
 
+		print ('''
+			set DYNAMIC_LIBRARY_PATH to '$libdir:%s' 
+			; load 'libpgchess';
+		''' % settings.dbchesslib)
+
 		cursor = self.conn.cursor()
 		cursor.execute('''
 			set DYNAMIC_LIBRARY_PATH to '$libdir:%s' 
