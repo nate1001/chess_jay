@@ -120,10 +120,6 @@ class Move(object):
 	def __str__(self):
 		return self.move
 	
-	@classmethod
-	def fromSquares(cls, ssquare, esquare, promotion=''):
-		return Move(str(ssquare) + str(esquare) + promotion)
-
 
 class GameMove(Move):
 	
@@ -190,6 +186,20 @@ class AbstractGameEngine(object):
 		self.movenum = None
 		self.iswhite = None
 		self.boardstring = None
+
+		self.castles  = {
+			('K', 'e1', 'g1'): Move('h1f1'),
+			('K', 'e1', 'c1'): Move('a1d1'),
+			('k', 'e8', 'g8'): Move('h8f8'),
+			('k', 'e8', 'c8'): Move('a8d8'),
+		}
+
+		self.castles_reversed  = {
+			('K', 'g1', 'e1'): Move('f1h1'),
+			('K', 'c1', 'e1'): Move('d1a1'),
+			('k', 'g8', 'e8'): Move('f8h8'),
+			('k', 'c8', 'e8'): Move('d8a8'),
+		}
 	
 	def __str__(self):
 
@@ -201,18 +211,18 @@ class AbstractGameEngine(object):
 	def _makeMove(self, move):
 		raise NotImplementedError
 	
-	def newGame(self, boardstring, movenum=1, iswhite=True):
-		self.movenum = movenum
-		self.iswhite = iswhite
+	def newGame(self, boardstring):
 		self.boardstring = boardstring
+		self.initial = boardstring
 	
-	def reset(self, move, boardstring):
-
-		self.movenum = move.movenum
-		self.iswhite = move.iswhite
-		self.boardstring = BoardString(boardstring.string)
+	def reset(self, boardstring):
+		
+		if boardstring is None:
+			self.boardstring = BoardString(self.initial.string)
+		else:
+			self.boardstring = BoardString(boardstring.string)
 	
-	def makeMove(self, move):
+	def makeMove(self, move, movenum, iswhite):
 
 		if not self.validateMove(move):
 			raise IllegalMove(move)
@@ -221,20 +231,23 @@ class AbstractGameEngine(object):
 		game_move.board_before = BoardString(self.boardstring.string)
 		self.boardstring.makeMove(move.ssquare, move.esquare, move.promotion)
 		
-		game_move.movenum = self.movenum
-		game_move.iswhite = self.iswhite
+		game_move.movenum = movenum
+		game_move.iswhite = iswhite
 		game_move.san = str(move)
 		game_move.board_after = BoardString(self.boardstring.string)
 
-		if self.iswhite == False:
-			self.movenum += 1
-		self.iswhite = not self.iswhite
-
-
 		return game_move
 
-	def halfmove(self):
-		return (self.movenum - 1 ) * 2 + int(not self.iswhite) + 1
+
+	def castleRookMove(self, move):
+		'''Returns the corresponding rook move if a given move is a castling one.'''
+
+		subject, start, end = move.getSubject(), str(move.ssquare), str(move.esquare)
+
+		for castle in [self.castles, self.castles_reversed]:
+			if castle.has_key((subject, start, end)):
+				return castle[(subject, start, end)]
+		return None
 	
 
 
@@ -255,7 +268,10 @@ class DBGameEngine(AbstractGameEngine):
 
 	def __init__(self):
 		super(DumbGameEngine, self).__init__()
-	
+
+
+
+
 
 
 if __name__ == '__main__':

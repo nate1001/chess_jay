@@ -6,18 +6,13 @@ Copyright Nate Carson 2012
 import psycopg2
 
 import settings
-from game_engine import Move
+from game_engine import GameMove, BoardString
 
 
 class Conn(object):
 
 	def __init__(self):
 		self.conn = psycopg2.connect('dbname=' + settings.dbname)
-
-		print ('''
-			set DYNAMIC_LIBRARY_PATH to '$libdir:%s' 
-			; load 'libpgchess';
-		''' % settings.dbchesslib)
 
 		cursor = self.conn.cursor()
 		cursor.execute('''
@@ -74,7 +69,7 @@ class Games(Table):
 		return '%s vs. %s' %(self.white, self.black)
 
 
-class Moves(Table):
+class Moves(Table, GameMove):
 	
 	_rows = [
 			'id', 'game_id', 'movenum', 'iswhite', 'move', 'san', 'board_before', 'board_after']
@@ -83,6 +78,9 @@ class Moves(Table):
 
 	def __init__(self, row):
 		super(Moves, self).__init__(row)
+		super(GameMove, self).__init__(self.move)
+		self.board_before = BoardString(self.board_before)
+		self.board_after = BoardString(self.board_after)
 
 	def __repr__(self):
 		return '%s%s %s' % (
@@ -113,6 +111,9 @@ class VariationStats(Table):
 	_select1 = 'select * from variationstats(%s)'
 
 
+
+
+'''
 class ValidMoves(Table):
 	
 	_rows = ['piece', 'fid', 'tid', 'direc', 'length', 'target']
@@ -148,3 +149,4 @@ class Force(Table):
 	_rows = ['tid', 'c_white', 'c_black']
 	_select1 = 'select * from force(%s)'
 
+'''

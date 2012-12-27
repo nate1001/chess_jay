@@ -6,7 +6,7 @@ from PyQt4 import QtCore, QtGui
 
 from db import Moves, Opening
 from util import tr
-from game_engine import BoardString, Move
+from game_engine import BoardString, GameMove
 import settings
 
 
@@ -27,8 +27,9 @@ class TableWidget(QtGui.QTableWidget):
 
 		self.setEditTriggers(QtGui.QAbstractItemView.NoEditTriggers)
 
-		self.itemActivated.connect(self.onItemSelected)
-		self.itemClicked.connect(self.onItemSelected)
+		#self.itemActivated.connect(self.onItemSelected)
+		#self.itemClicked.connect(self.onItemSelected)
+		self.currentCellChanged.connect(self.onCellChanged)
 
 		# layout
 		self.container = QtGui.QWidget()
@@ -65,7 +66,8 @@ class OpeningTable(TableWidget):
 
 	moveSelected = QtCore.pyqtSignal(str)
 
-	def onMoveMade(self, boardstring, move, halfmove):
+	#FIXME
+	def onMoveMade(self, move):
 
 		rows = Opening.select(str(boardstring), str(move))
 		self.setRowCount(len(rows))
@@ -158,65 +160,61 @@ class MoveList(list):
 	def __init__(self):
 		super(MoveList, self).__init__()
 
-		self.current = None
-	
-	
-	def byKey(self, movenum, iswhite):
-		for move in self:
-			if move.movenum == movenum and move.iswhite == iswhite:
-				return move
-		raise KeyError(movenum, iswhite)
+		self._current = None
 	
 	def toCurrentSlice(self):
 		'''Return new move list up to but not including the current move.'''
+
 		ml = MoveList()
-		if self.current == None or not self:
+
+		if not self._current:
+			return ml
+		if not self:
 			raise ValueError("Moves list is emtpy")
 
 		for move in self:
 			ml.append(move)
-			if move == self.current:
+			if move == self._current:
 				return ml
 		raise ValueError("current move was not found")
 	
-	def first(self):
-		if not self:
-			return None
-		return self[0]
+	def getNewMoveNum(self):
 
-	def last(self):
-		if not self:
-			return None
-		return self[-1]
-	
-	def next(self):
-		if not self.current and not self:
-			return None
-		elif not self.current:
-			return self[0]
+		# if not current we are on the first move
+		if self._current is None:
+			# if the first move starts with blacks go
+			if self and self[0].iswhite == False:
+				return 1, False
+			else:
+				return 1, True
 
-		idx = self.index(self.current)
-		try:
-			return self[idx + 1]
-		except IndexError:
-			return None
+		idx = self.index(self._current) + 1
+		return (idx / 2 + 1, not(idx % 2))
 	
-	def previous(self):
-		if not self:
-			return None
-		idx = self.index(self.current)
-		# if we are not on the first move
-		if idx > 0:
-			return self[idx - 1]
-		return None
+	def diff(self, move):
+		return self._current and self.index(move) - self.index(self._current)
 	
+	def setCurrent(self, move):
+		
+		if move is not None:
+			# make sure its in there
+			self.index(move)
+		self._current = move
+	
+
+class MoveItem(QtGui.QTableWidgetItem):
+	
+	def __init__(self, move):
+		super(MoveItem, self).__init__(move.san)
+		self.move = move
 	
 
 class MoveTable(TableWidget):
+	#FIXME empty cells f-up logic. Figure out how to disable them so they cannot be clicked or moved into.
 
 	labels = ['White', 'Black']
 
-	moveMade = QtCore.pyqtSignal(str, str, int)
+	moveMade = QtCore.pyqtSignal(GameMove)
 
 	def __init__(self, board, game_engine):
 		super(MoveTable, self).__init__()
@@ -233,19 +231,6 @@ class MoveTable(TableWidget):
 		self._addAction(">|", 'last_move', tr("last move"), self.lastMove)
 		self._addAction("R", 'reload_board', tr("reload board"), self.reload)
 
-		self.castles  = {
-			('K', 'e1', 'g1'): Move('h1f1'),
-			('K', 'e1', 'c1'): Move('a1d1'),
-			('k', 'e8', 'g8'): Move('h8f8'),
-			('k', 'e8', 'c8'): Move('a8d8'),
-		}
-
-		self.castles_reversed  = {
-			('K', 'g1', 'e1'): Move('f1h1'),
-			('K', 'c1', 'e1'): Move('d1a1'),
-			('k', 'g8', 'e8'): Move('f8h8'),
-			('k', 'c8', 'e8'): Move('d8a8'),
-		}
 	
 	def newGame(self):
 		b = BoardString()
@@ -260,45 +245,75 @@ class MoveTable(TableWidget):
 	
 	def setEngine(self, game_engine):
 		self.game_engine = game_engine
+	
+	def _setCurrent(self, cmp, diff):
+
+		row, col = self.currentRow(), self.currentColumn()
+		if row == -1 and col == -1:
+			return False
+
+		if col == cmp:
+			row += diff
+		col = int (not col)
+
+		item = self.item(row, col)
+		if not item:
+			return None
+
+		self.setCurrentCell(row, col)
+		return True
 
 	def reload(self):
-
-		self._set_move(self.move_list.current)
+		row, col = self.currentRow(), self.currentColumn()
+		self.onCellChanged(row, col, row, col)
 
 	def firstMove(self):
-		self._set_move(self.move_list.first(), first=True)
+		self.setCurrentCell(-1, -1)
 
 	def lastMove(self):
-		self._set_move(self.move_list.last())
-
+		l = len(self.move_list)
+		if l == 0:
+			return
+		self.setCurrentCell(l / 2, (l+1) % 2)
+		
 	def nextMove(self):
-		self._set_move(self.move_list.next())
+		success = self._setCurrent(1, 1)
+		# if we are trying to to cell with no move in it
+		if success is None:
+			return
+
+		# if there is not a current cell and we have moves
+		elif not success and self.move_list:
+			# then goto the first move
+			self.setCurrentCell(0,0)
+
+		# else it already worked
+		else:
+			pass
 
 	def previousMove(self):
-		self._set_move(self.move_list.current)
+		self._setCurrent(0, -1)
 
-	def onItemSelected(self, item):
-		movenum = item.row() + 1
-		iswhite = item.column() == 0
-		game_move = self.move_list.byKey(movenum, iswhite)
-		self._set_move(game_move)
-	
 	def onNewMove(self, move):
+
 		if not self.game_engine.validateMove(move):
 			print 'did not validate'
 			#TODO we could beep here
 			return
+		else:
+			pass
 
 		# let the engine make the move
-		game_move = self.game_engine.makeMove(move)
+		movenum, iswhite = self.move_list.getNewMoveNum()
+		game_move = self.game_engine.makeMove(move, movenum, iswhite)
 
 		# add the move into the list:
 		# if this is the first move of the game
-		if not self.move_list.current:
+		if not self.move_list:
 			self.appendMove(game_move)
 
 		# else if this a new move to be appended to the game
- 		elif self.move_list.last().halfmove() + 1 == game_move.halfmove():
+ 		elif self.move_list[-1].halfmove() + 1 == game_move.halfmove():
 			self.appendMove(game_move)
 
 		# else we have a new variation
@@ -321,81 +336,59 @@ class MoveTable(TableWidget):
 	def appendMove(self, game_move, setmove=True):
 
 		self.move_list.append(game_move)
-		item = QtGui.QTableWidgetItem(game_move.san)
 
-		# XXX this will not take into account games that do not start from move 1
-		# But, does it make sense to allow a game fragment, with a starting move other than 1?
-		# FIXME will not be able to show move if this did happen.
-		self.setRowCount(len(self.move_list)/2 + 1)
+		item = MoveItem(game_move)
+		l = len(self.move_list)
+		self.setRowCount(l / 2 + 1)
+		row, col = (l-1) / 2, int(not game_move.iswhite)
 
-		self.setItem( game_move.movenum - 1, int(not game_move.iswhite), item)
-
+		self.setItem(row, col, item)
 		if setmove:
-			self._set_move(game_move)
-	
+			self.setCurrentCell(row, col)
+
+
 	def _move_piece(self, move, uncapture=''):
 		#We need this to check for castling moves so we can move the rook.
-		
-		subject, start, end = move.getSubject(), str(move.ssquare), str(move.esquare)
-
 		self.board.movePiece(move, uncapture)
+		rook = self.game_engine.castleRookMove(move)
+		if rook:
+			self.board.movePiece(rook, uncapture)
 
-		for castle in [self.castles, self.castles_reversed]:
-			if castle.has_key((subject, start, end)):
-				rook = castle[(subject, start, end)]
-				self.board.movePiece(rook, uncapture)
-	
-	def _set_move(self, game_move, first=False):
+	def onCellChanged(self, cur_row, cur_col, prev_row, prev_col):
 
-		if not game_move:
+		# if no cell is selected go to initial board
+		if cur_row == -1 and cur_col == -1:
+			self.game_engine.reset(None)
+			self.move_list.setCurrent(None)
+			#self.moveMade.emit(None, None, None)
+			self.board.setBoard(self.game_engine.initial)
 			return
-		#make sure the move is in the move list
-		self.move_list.byKey(game_move.movenum, game_move.iswhite)
 
-		self.setCurrentCell(game_move.movenum - 1, int(not game_move.iswhite))
+		item = self.item(cur_row, cur_col)
+		if not item:
+			return
+		move = item.move
+		diff = self.move_list.diff(move)
 
-		current = self.move_list.current
+		# one move backward from current
+		if diff == -1:
+			next = self.move_list[self.move_list.index(move) + 1]
+			self._move_piece(next.reverse(), next.getTarget())
 
-		#update the board
+		# one move forward from current or first move from inital
+		elif diff == 1:
+			self._move_piece(move)
 
-		# if the move is going backwards by one halfmove
-		if current and current.halfmove() - game_move.halfmove() == 0:
-			self._move_piece(game_move.reverse(), game_move.getTarget())
-			self.game_engine.reset(game_move, game_move.board_before)
-			current = self.move_list.previous()
-			self.move_list.current = current
-
-		# if we want the very first move
-		elif first:
-			self.board.setBoard(game_move.board_before)
-			self.game_engine.reset(game_move, game_move.board_before)
-			self.move_list.current = None
-
+		# everything else
 		else:
-			# if we are on the first move of the game
-			if not current and game_move.halfmove() == 1:
-				self.game_engine.reset(game_move, game_move.board_after)
-				self._move_piece(game_move)
+			self.board.setBoard(move.board_after)
 
-			# if it is the same move
-			elif game_move == current:
-				# reset anyways as it might be a reload
-				self.board.setBoard(game_move.board_after)
-				self.game_engine.reset(game_move, game_move.board_after)
+		self.game_engine.reset(move.board_after)
+		self.move_list.setCurrent(move)
+		self.moveMade.emit(move)
+		
+	
 
-			# else if this is one move forward
-			elif current and current.halfmove() == game_move.halfmove() - 1: 
-				self._move_piece(game_move)
-				self.game_engine.reset(game_move, game_move.board_after)
-
-			# else reset the board since there are multiple moves in between
-			else:
-				self.board.setBoard(game_move.board_after)
-				self.game_engine.reset(game_move, game_move.board_after)
-
-			self.move_list.current = game_move
-
-		self.moveMade.emit(game_move.board_before.board, game_move.move, game_move.halfmove())
 
 	
 

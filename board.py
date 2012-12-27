@@ -11,7 +11,7 @@ from game_engine import Move, AlgSquare, BoardString, Piece
 from util import tr
 import settings
 
-
+	
 
 class CursorItem(QtGui.QGraphicsRectItem):
 	'''Rectangle Item to be used as a cursor for selecting squares with the keyboard.'''
@@ -546,7 +546,6 @@ class GameWidget(QtGui.QGraphicsWidget):
 
 		#move_table
 		self.move_table = MoveTable(self.board, game_engine)
-		self.move_table.moveMade.connect(self.onMoveMade)
 		x, y = settings.board_size + 1, 0
 		proxy = self._createProxyWidget(self.move_table, x, y)
 
@@ -569,7 +568,7 @@ class GameWidget(QtGui.QGraphicsWidget):
 	def setEngine(self, game_engine):
 		self.move_table.setEngine(game_engine)
 	
-	def onMoveMade(self, boardstring, move, halfmove):
+	def onMoveMade(self, move):
 		pass
 
 	
@@ -624,7 +623,7 @@ if __name__ == '__main__':
 	import db
 	moves = []
 	for row in db.Moves.select(1):
-		moves.append(GameMove.getGameMove(row))
+		moves.append(row)
 	game_widget.loadGame(moves)
 
 	sys.exit(app.exec_())
