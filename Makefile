@@ -1,5 +1,6 @@
 
+all:
+	true
+
 clean:
 	rm *.pyc
-all:
-	echo TODO
