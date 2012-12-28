@@ -7,7 +7,7 @@ from PyQt4 import QtCore, QtGui, QtSvg
 
 
 from table_widget import MoveTable, OpeningTable
-from game_engine import Move, AlgSquare, BoardString, Piece
+from game_engine import Move, AlgSquare, PalleteSquare, BoardString, Piece
 from util import tr
 import settings
 
@@ -169,6 +169,7 @@ class SquareItem(QtGui.QGraphicsRectItem):
 	
 	def setCustomColor(self, color):
 		self._custom_color = color
+		self._setColor()
 	
 	def _setColor(self):
 
@@ -203,7 +204,7 @@ class SquareItem(QtGui.QGraphicsRectItem):
 			event.ignore()
 			return
 		self.signals.squareSelected.emit(self)
-	
+
 	def setSelected(self, active):
 		if active:
 			self.setBrush(self._selected_brush)
@@ -235,6 +236,7 @@ class SquareItem(QtGui.QGraphicsRectItem):
 
 class SquareSignals(QtCore.QObject):
 		squareSelected = QtCore.pyqtSignal(SquareItem)
+		squareDoubleClicked = QtCore.pyqtSignal(SquareItem)
 
 
 class BoardWidget(QtGui.QGraphicsWidget):
@@ -249,6 +251,7 @@ class BoardWidget(QtGui.QGraphicsWidget):
 	EMPTY_SQUARE = tr('.')
 
 	newMove = QtCore.pyqtSignal(Move)
+	boardChanged = QtCore.pyqtSignal(BoardString)
 
 	def __init__(self, parent=None):
 		super(BoardWidget, self).__init__(parent)
@@ -261,6 +264,7 @@ class BoardWidget(QtGui.QGraphicsWidget):
 		self._selected_square = None
 		self._current_move = None
 		self._font = None
+		self._editable = False
 
 		self.setFlag(QtGui.QGraphicsItem.ItemIsFocusable, True)
 
@@ -274,6 +278,9 @@ class BoardWidget(QtGui.QGraphicsWidget):
 
 		#self.setSceneRect(QtCore.QRectF(0, 0, settings.board_size , settings.board_size))
 	
+	def setEditable(self, editable):
+		self._editable = editable
+	
 	def setBoard(self, boardstring):
 
 		#clear out board if any
@@ -284,9 +291,17 @@ class BoardWidget(QtGui.QGraphicsWidget):
 
 		self._font = ChessFontDict(settings.chess_font)
 
-		# squares
+		# AlgSquares
 		for algsquare in AlgSquare.generate():
-			self._createSquare(algsquare, boardstring)
+			idx = self._toboardnum(algsquare.x, algsquare.y)
+			symbol = boardstring.string[idx]
+			square = self._createSquare(algsquare, symbol)
+
+		# PalleteSquares
+		for idx, algsquare in enumerate(PalleteSquare.generate()):
+			symbol = Piece.pieces[idx]
+			square = self._createSquare(algsquare, symbol)
+			square.setCustomColor(settings.COLOR_NONE)
 
 		#cursor - init once
 		if self.cursor is None:
@@ -294,7 +309,16 @@ class BoardWidget(QtGui.QGraphicsWidget):
 			self.cursor = CursorItem(s.algsquare)
 			self.cursor.setParentItem(self)
 			self._itemSetPos(self.cursor, s.x, s.y)
-
+	
+	def toString(self):
+		algsquares = list(AlgSquare.generate())
+		string = list(BoardString.EMPTY_SQUARE * len(algsquares))
+		for square in algsquares:
+			idx = self._toboardnum(square.x, square.y)
+			piece = self._squares[square.label].getPiece()
+			if piece:
+				string[idx] = piece.name
+		return ''.join(string)
 	
 	def _toboardnum(self, x, y):
 		return ((8-y) * 8) + x - 1 
@@ -309,7 +333,12 @@ class BoardWidget(QtGui.QGraphicsWidget):
 		guide.setParentItem(self)
 		return guide
 	
-	def _createSquare(self, algsquare, boardstring):
+	def _createPiece(self, square, symbol):
+		piece = PieceItem(square, self._font[symbol])
+		piece.signals.pieceDoubleClicked.connect(self.onPieceDoubleClicked)
+		square.addPiece(piece)
+	
+	def _createSquare(self, algsquare, symbol):
 
 		square = SquareItem(algsquare.x, algsquare.y, algsquare)
 		self._itemSetPos(square, algsquare.x, algsquare.y)
@@ -319,11 +348,10 @@ class BoardWidget(QtGui.QGraphicsWidget):
 
 		square.signals.squareSelected.connect(self.onSquareSelected)
 
-		idx = self._toboardnum(algsquare.x, algsquare.y)
-		symbol = boardstring.string[idx]
 		if symbol != BoardString.EMPTY_SQUARE:
-			piece = PieceItem(square, self._font[symbol])
-			square.addPiece(piece)
+			self._createPiece(square, symbol)
+
+		return square
 
 	
 	def movePiece(self, move, uncapture=None):
@@ -372,6 +400,15 @@ class BoardWidget(QtGui.QGraphicsWidget):
 			piece = PieceItem(square, self._font[uncapture])
 			piece.animation.fadeIn()
 			fromsquare.addPiece(piece)
+
+	def onPieceDoubleClicked(self, piece):
+		square = piece.parentItem()
+		if self._editable and not square.algsquare.isPallete():
+			piece = square.removePiece()
+			piece.animation.fadeOut()
+
+		self._selected_square = None
+		square.setSelected(False)
 	
 	def onSquareSelected(self, square):
 		'''Catches squareSelected signal from squares and keeps track of currently selected square.'''
@@ -385,9 +422,37 @@ class BoardWidget(QtGui.QGraphicsWidget):
 		elif self._selected_square is not None:
 			ssquare = self._selected_square.algsquare
 			esquare = square.algsquare
-			self.newMove.emit(Move(str(ssquare) + str(esquare)))
-			self._selected_square.setSelected(False)
-			self._selected_square = None
+
+			# we cannot drop onto the pallete
+			if esquare.isPallete():
+				square.setSelected(False)
+				return
+
+			# else we have a new move
+			else:
+				# if we adding from the pallete
+				if ssquare.isPallete():
+					if self._editable:
+						try:
+							old = square.removePiece()
+							old.animation.fadeOut()
+						except ValueError:
+							pass
+						symbol = self._selected_square.getPiece().name
+						new = PieceItem(square, self._font[symbol])
+						square.addPiece(new)
+						new.animation.fadeIn()
+						self.boardChanged.emit(BoardString(self.toString()))
+				# else it is a standard move
+				else:
+					move = Move(str(ssquare) + str(esquare))
+					if self._editable:
+						self.movePiece(move)
+					else:
+						self.newMove.emit(move)
+
+				self._selected_square.setSelected(False)
+				self._selected_square = None
 
 		# else its the first selection
 		else:
@@ -472,6 +537,7 @@ class PieceItem(QtSvg.QGraphicsSvgItem):
 		self.setSharedRenderer(renderer)
 		self.setFlag(QtGui.QGraphicsItem.ItemIsMovable, True)
 		self._init(renderer)
+		self.signals = PieceSignals()
 	
 	def __str__(self):
 		return '<PieceItem %s>' % self.name
@@ -495,15 +561,36 @@ class PieceItem(QtSvg.QGraphicsSvgItem):
 			return
 
 		# self.square.board
-		self.parentItem().parentItem().onSquareSelected(self.parentItem())
+		item = self.parentItem().parentItem()
+		# it the parent is a square item
+		if item is not None:
+			item.onSquareSelected(self.parentItem())
+
+	def mouseDoubleClickEvent(self, event):
+		if event.button() != QtCore.Qt.LeftButton:
+			event.ignore()
+			return
+		self.signals.pieceDoubleClicked.emit(self)
+	
 
 	def mouseMoveEvent(self, event):
 		
 		drag = QtGui.QDrag(event.widget())
 		mime = QtCore.QMimeData()
-		mime.setText(self.parentItem().algsquare.label)
+		item = self.parentItem()
+
+		# if the parent is a square item
+		if hasattr(item, 'algsquare'):
+			mime.setText(item.algsquare.label)
+		# else its from the piece pallete
+		else:
+			mime.setText(self.name)
+
 		drag.setMimeData(mime)
 		drag.exec_()
+
+class PieceSignals(QtCore.QObject):
+	pieceDoubleClicked = QtCore.pyqtSignal(PieceItem)
 	
 
 class ChessFontRenderer(QtSvg.QSvgRenderer):
@@ -535,36 +622,50 @@ class ToolBar(QtGui.QToolBar):
 
 	def addAction(self, label, settings_key, tip, callback):
 
-		super(ToolBar, self).addAction(
-			QtGui.QAction(
-				label, 
-				self, 
-				shortcut=settings.keys[settings_key], 
-				statusTip=tr(tip), 
-				triggered=callback
-		))
+		action = QtGui.QAction(label, self)
+		action.setShortcut(settings.keys[settings_key])
+		action.setToolTip(tip)
+		action.triggered.connect(callback)
+		super(ToolBar, self).addAction(action)
+		return action
+
 
 class ChessScene(QtGui.QGraphicsScene):
+
 	def __init__(self, game_engine):
 
 		super(ChessScene, self).__init__()
 
-		# toolbar
-		toolbar = ToolBar()
-		toolbar.addAction("N", 'first_move', tr("new game"), self.newGame)
-		proxy = self.addWidget(toolbar)
-		height = toolbar.minimumHeight() + 1
-		rect = QtCore.QRectF(0, 0, settings.board_size, height)
-		proxy.setGeometry(rect)
+		font = ChessFontDict(settings.chess_font)
 
 		#board
 		self.board = BoardWidget()
 		self.addItem(self.board)
+
+		# toolbar
+		toolbar = ToolBar()
+		toolbar.addAction("N", 'first_move', tr("new game"), self.newGame)
+		group = QtGui.QActionGroup(toolbar)
+		a = toolbar.addAction("S", 'first_move', tr("set board"), self.onShowPallete)
+		a.setCheckable(True)
+		group.addAction(a)
+		a = toolbar.addAction("P", 'first_move', tr("play game"), self.onShowMoves)
+		a.setCheckable(True)
+		a.setChecked(True)
+		group.addAction(a)
+		group.setExclusive(True)
+
+		proxy = self.addWidget(toolbar)
+		height = toolbar.minimumHeight() + 1
+		rect = QtCore.QRectF(0, 0, settings.board_size, height)
+		proxy.setGeometry(rect)
 		self.board.setPos(0, height)
+
 
 		#move_table 
 		toolbar = ToolBar()
 		self.move_table = MoveTable(toolbar, self.board, game_engine)
+		self.board.boardChanged.connect(self.move_table.resetEngine)
 
 		x, y = settings.board_size + 1, height
 		proxy = self.addWidget(self.move_table)
@@ -579,6 +680,7 @@ class ChessScene(QtGui.QGraphicsScene):
 		proxy.setGeometry(rect)
 		proxy.setPos(x, 0)
 
+
 		#opening_table
 		#self.opening_table = OpeningTable()
 		#self.move_table.moveMade.connect(self.opening_table.onMoveMade)
@@ -587,6 +689,13 @@ class ChessScene(QtGui.QGraphicsScene):
 		self.setEngine(game_engine)
 		self.newGame()
 
+	def onShowPallete(self):
+		self.move_table.hide()
+		self.board.setEditable(True)
+
+	def onShowMoves(self):
+		self.move_table.show()
+		self.board.setEditable(False)
 
 	def moveCursor(self, direction):
 		self.board.moveCursor(direction)
@@ -602,7 +711,6 @@ class ChessScene(QtGui.QGraphicsScene):
 
 	def loadGame(self, moves):
 		board = self.move_table.loadGame(moves)
-		self.board.setBoard(board)
 
 	def newGame(self):
 		self.move_table.newGame()

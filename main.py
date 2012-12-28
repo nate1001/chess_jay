@@ -12,7 +12,7 @@ from util import tr
 from table_widget import VariationsTable
 
 class MainWindow(QtGui.QMainWindow):
-
+	
 	def __init__(self, engine, scene, view):
 		super(MainWindow, self).__init__()
 
@@ -27,7 +27,7 @@ class MainWindow(QtGui.QMainWindow):
 		self.widget.setLayout(layout)
 
 		self.setCentralWidget(self.widget)
-		self.setWindowTitle("Chess Analyzer")
+		self.setWindowTitle(tr("ChessJay"))
 
 		self.createActions()
 		self.createMenus()
@@ -58,7 +58,8 @@ class MainWindow(QtGui.QMainWindow):
 	
 	def createDocks(self):
 
-		Dock(self.scene.game_widget.opening_table, self.tr('Openings'), self)
+		pass
+		#Dock(self.scene.opening_table, self.tr('Openings'), self)
 
 
 		#variations_table
@@ -76,22 +77,17 @@ class Dock(QtGui.QDockWidget):
 		parent.view_menu.addAction(self.toggleViewAction())
 	
 
-
-
-
-
 if __name__ == '__main__':
 
 	import sys
 
 	from game_engine import DumbGameEngine, GameMove
-	from board import GameWidget
+	from board import ChessScene, ChessView
 
 	app = QtGui.QApplication(sys.argv)
 
 	game_engine = DumbGameEngine()
-	game_widget = GameWidget(game_engine)
-	scene = ChessScene(game_widget)
+	scene = ChessScene(game_engine)
 	view = ChessView(scene)
 	mainWindow = MainWindow(game_engine, scene, view)
 
@@ -105,7 +101,7 @@ if __name__ == '__main__':
 	moves = []
 	for row in db.Moves.select(1):
 		moves.append(GameMove.getGameMove(row))
-	game_widget.loadGame(moves)
+	scene.loadGame(moves)
 
 	sys.exit(app.exec_())
 

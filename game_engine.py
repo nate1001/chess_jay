@@ -42,7 +42,7 @@ class BoardString(object):
 	def __init__(self, board=tr('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR')):
 
 		cls = self.__class__
-		self.string = (board.split()[0].replace('/','').
+		self.string = (str(board).split()[0].replace('/','').
 				replace('8', cls.EMPTY_SQUARE * 8).
 				replace('7', cls.EMPTY_SQUARE * 7).
 				replace('6', cls.EMPTY_SQUARE * 6).
@@ -93,9 +93,14 @@ class AlgSquare(object):
 		if len(label) != 2:
 			raise ValueError(label)
 
-		self.x = AlgSquare.files.index(label[0]) + 1
-		self.y = AlgSquare.ranks.index(label[1]) + 1
+		cls = self.__class__
+
+		self.x = cls.files.index(label[0]) + 1
+		self.y = cls.ranks.index(label[1]) + 1
 		self.label = label
+	
+	def isPallete(self):
+		return False
 	
 	def __str__(self):
 		return self.label
@@ -108,17 +113,36 @@ class AlgSquare(object):
 				yield cls(cls.files[x] + cls.ranks[y])
 
 
+
+class PalleteSquare(AlgSquare):
+#XXX this really belongs with board.py but its nice
+#	 to have it next to the orignal definition.
+
+	files = AlgSquare.files + 'ij'
+
+	def isPallete(self):
+		return True
+
+	@classmethod
+	def generate(cls):
+		
+		for x in range(8, 10):
+			for y in range(6):
+				yield cls(cls.files[x] + cls.ranks[y])
+
+
 class Move(object):
 	
-	def __init__(self, move):
+	def __init__(self, move, squarecls=AlgSquare):
 		
-		self.ssquare = AlgSquare(move[:2])
-		self.esquare = AlgSquare(move[2:4])
+		self.ssquare = squarecls(move[:2])
+		self.esquare = squarecls(move[2:4])
 		self.promotion = move[4:5] or None
 		self.move = move
 	
 	def __str__(self):
 		return self.move
+	
 	
 
 class GameMove(Move):

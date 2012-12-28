@@ -229,6 +229,9 @@ class MoveTable(TableWidget):
 	def setEngine(self, game_engine):
 		self.game_engine = game_engine
 	
+	def resetEngine(self, boardstring):
+		self.game_engine.reset(boardstring)
+		
 	def _setCurrent(self, cmp, diff):
 
 		row, col = self.currentRow(), self.currentColumn()
@@ -279,6 +282,7 @@ class MoveTable(TableWidget):
 
 	def onNewMove(self, move):
 
+		print 99, move
 		if not self.game_engine.validateMove(move):
 			print 'did not validate'
 			#TODO we could beep here
