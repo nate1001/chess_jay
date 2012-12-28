@@ -13,7 +13,7 @@ import settings
 class TableWidget(QtGui.QTableWidget):
 	COLUMN_WIDTH = 60
 
-	def __init__(self):
+	def __init__(self, toolbar):
 		super(TableWidget, self).__init__()
 
 		self.setColumnCount(len(self.labels))
@@ -31,27 +31,8 @@ class TableWidget(QtGui.QTableWidget):
 		#self.itemClicked.connect(self.onItemSelected)
 		self.currentCellChanged.connect(self.onCellChanged)
 
-		# layout
-		self.container = QtGui.QWidget()
-		self.toolbar = QtGui.QToolBar(self)
-		layout = QtGui.QVBoxLayout(self.container)
-		layout.addWidget(self.toolbar)
-		layout.addWidget(self)
-		layout.setContentsMargins(0,0,0,0)
+		self.toolbar = toolbar
 	
-	def _addAction(self, label, settings_key, tip, callback):
-
-		self.toolbar.addAction(
-			QtGui.QAction(
-				label, 
-				self, 
-				shortcut=settings.keys[settings_key], 
-				statusTip=tr(tip), 
-				triggered=callback
-		))
-	
-
-
 
 	def __getitem__(self, rowname):
 		row, name = rowname
@@ -216,8 +197,8 @@ class MoveTable(TableWidget):
 
 	moveMade = QtCore.pyqtSignal(GameMove)
 
-	def __init__(self, board, game_engine):
-		super(MoveTable, self).__init__()
+	def __init__(self, toolbar, board, game_engine):
+		super(MoveTable, self).__init__(toolbar)
 
 		self.board = board
 		self.game_engine = game_engine
@@ -225,17 +206,19 @@ class MoveTable(TableWidget):
 
 		self.board.newMove.connect(self.onNewMove)
 
-		self._addAction("|<", 'first_move', tr("first move"), self.firstMove)
-		self._addAction("<", 'previous_move', tr("previous move"), self.previousMove)
-		self._addAction(">", 'next_move', tr("next move"), self.nextMove)
-		self._addAction(">|", 'last_move', tr("last move"), self.lastMove)
-		self._addAction("R", 'reload_board', tr("reload board"), self.reload)
+		self.toolbar.addAction("|<", 'first_move', tr("first move"), self.firstMove)
+		self.toolbar.addAction("<", 'previous_move', tr("previous move"), self.previousMove)
+		self.toolbar.addAction(">", 'next_move', tr("next move"), self.nextMove)
+		self.toolbar.addAction(">|", 'last_move', tr("last move"), self.lastMove)
+		self.toolbar.addAction("R", 'reload_board', tr("reload board"), self.reload)
 
 	
 	def newGame(self):
 		b = BoardString()
 		self.game_engine.newGame(b)
-		self.move_list = MoveList()
+		self.setMoves([])
+		self.setRowCount(0)
+		self.board.setBoard(b)
 		return b
 	
 	def loadGame(self, moves):

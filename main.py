@@ -76,71 +76,7 @@ class Dock(QtGui.QDockWidget):
 		parent.view_menu.addAction(self.toggleViewAction())
 	
 
-class ChessScene(QtGui.QGraphicsScene):
-	def __init__(self, game_widget):
-		super(ChessScene, self).__init__()
 
-		self.game_widget = game_widget
-		self.addItem(self.game_widget)
-	
-	def moveCursor(self, direction):
-		self.game.board.moveCursor(direction)
-
-	def cursorSelect(self):
-		self.game.board.cursorSelect()
-
-	def toggleLabels(self):
-		self.game.board.toggleLabels()
-
-	def toggleGuides(self):
-		self.game.board.toggleGuides()
-
-
-class ChessView(QtGui.QGraphicsView):
-
-	direction_pressed = QtCore.pyqtSignal(str)
-	
-	def __init__(self, scene):
-		super(ChessView, self).__init__(scene)
-
-		self.direction_pressed.connect(
-			scene.game_widget.board.cursor.onDirectionPressed)
-
-	def keyPressEvent(self, event):
-
-		scene = self.scene()
-
-		if event.key() == QtCore.Qt.Key_Escape:
-			self.close()
-
-		if event.key() == settings.keys['cursor_south']:
-			self.direction_pressed.emit('south')
-		elif event.key() == settings.keys['cursor_north']:
-			self.direction_pressed.emit('north')
-		elif event.key() == settings.keys['cursor_west']:
-			self.direction_pressed.emit('west')
-		elif event.key() == settings.keys['cursor_east']:
-			self.direction_pressed.emit('east')
-
-		if event.key()  == settings.keys['cursor_northwest']:
-			self.direction_pressed.emit('northwest')
-		elif event.key() == settings.keys['cursor_northeast']:
-			self.direction_pressed.emit('northeast')
-		elif event.key() == settings.keys['cursor_southwest']:
-			self.direction_pressed.emit('southwest')
-		elif event.key() == settings.keys['cursor_southeast']:
-			self.direction_pressed.emit('southeast')
-
-		elif event.key() == settings.keys['cursor_select']:
-			self.direction_pressed.emit('select')
-
-		super(ChessView, self).keyPressEvent(event)
-
-	def toggleLabels(self):
-		self.scene().toggleLabels()
-
-	def toggleGuides(self):
-		self.scene().toggleGuides()
 
 
 

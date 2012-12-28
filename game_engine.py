@@ -183,8 +183,6 @@ class IllegalMove(Exception): pass
 class AbstractGameEngine(object):
 	
 	def __init__(self):
-		self.movenum = None
-		self.iswhite = None
 		self.boardstring = None
 
 		self.castles  = {
@@ -203,7 +201,7 @@ class AbstractGameEngine(object):
 	
 	def __str__(self):
 
-		return "%s %s %s" %(self.boardstring, self.movenum, 'w' if self.iswhite else 'e')
+		return str(self.boardstring)
 	
 	def validateMove(self, move):
 		raise NotImplementedError
