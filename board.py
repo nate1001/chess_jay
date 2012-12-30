@@ -6,9 +6,9 @@ Copyright Nate Carson 2012
 from PyQt4 import QtCore, QtGui, QtSvg
 
 
-from table_widget import MoveTable, OpeningTable
+from move_list import MoveTable
 from game_engine import Move, AlgSquare, PalleteSquare, BoardString, Piece
-from util import tr
+from util import tr, ToolBar
 import settings
 
 	
@@ -240,6 +240,33 @@ class SquareSignals(QtCore.QObject):
 
 
 class BoardWidget(QtGui.QGraphicsWidget):
+
+	newMove = QtCore.pyqtSignal(Move)
+	boardChanged = QtCore.pyqtSignal(BoardString)
+
+	def test(self):
+		pass
+
+
+	def __init__(self):
+		super(BoardWidget, self).__init__()
+
+		self.geometryChanged.connect(self.test)
+
+		self.squares = BoardSquaresWidget()
+		self.squares.setParentItem(self)
+
+	
+	def newGame(self):
+		pass
+		#FIXME
+	
+	def setBoard(self, boardstring):
+		self.squares.setBoard(boardstring)
+	
+
+
+class BoardSquaresWidget(QtGui.QGraphicsWidget):
 	'''
 		BoardWidget keeps tracks of the squares and moves pieces around.
 		The newMove signal will be emitted when two squares with pieces are clicked
@@ -250,13 +277,13 @@ class BoardWidget(QtGui.QGraphicsWidget):
 
 	EMPTY_SQUARE = tr('.')
 
-	newMove = QtCore.pyqtSignal(Move)
-	boardChanged = QtCore.pyqtSignal(BoardString)
+
 
 	def __init__(self, parent=None):
-		super(BoardWidget, self).__init__(parent)
+		super(BoardSquaresWidget, self).__init__(parent)
 
 		self.cursor = None
+
 
 		self._squares = {}
 		self._squares_by_xy = {}
@@ -268,18 +295,17 @@ class BoardWidget(QtGui.QGraphicsWidget):
 
 		self.setFlag(QtGui.QGraphicsItem.ItemIsFocusable, True)
 
+		'''
 		# guides
 		for f, r, idx in [(AlgSquare.files[i], AlgSquare.ranks[i], i) for i in range(len(AlgSquare.ranks))]:
 			self._guides[f] = self._createGuide(f, idx+1, 0)
 			self._guides[r] = self._createGuide(r, 0, idx+1)
 		#XXX we need this to overide default behavier of using square label_settings
 		self.toggleGuides(), self.toggleGuides()
+		'''
 
 
 		#self.setSceneRect(QtCore.QRectF(0, 0, settings.board_size , settings.board_size))
-	
-	def setEditable(self, editable):
-		self._editable = editable
 	
 	def setBoard(self, boardstring):
 
@@ -615,21 +641,6 @@ class ChessFontDict(dict):
 			self[piece] = ChessFontRenderer(fontname, piece)
 
 
-class ToolBar(QtGui.QToolBar):
-	def __init__(self):
-		super(ToolBar, self).__init__()
-
-
-	def addAction(self, label, settings_key, tip, callback):
-
-		action = QtGui.QAction(label, self)
-		action.setShortcut(settings.keys[settings_key])
-		action.setToolTip(tip)
-		action.triggered.connect(callback)
-		super(ToolBar, self).addAction(action)
-		return action
-
-
 class ChessScene(QtGui.QGraphicsScene):
 
 	def __init__(self, game_engine):
@@ -642,44 +653,13 @@ class ChessScene(QtGui.QGraphicsScene):
 		self.board = BoardWidget()
 		self.addItem(self.board)
 
-		# toolbar
-		toolbar = ToolBar()
-		toolbar.addAction("N", 'first_move', tr("new game"), self.newGame)
-		group = QtGui.QActionGroup(toolbar)
-		a = toolbar.addAction("S", 'first_move', tr("set board"), self.onShowPallete)
-		a.setCheckable(True)
-		group.addAction(a)
-		a = toolbar.addAction("P", 'first_move', tr("play game"), self.onShowMoves)
-		a.setCheckable(True)
-		a.setChecked(True)
-		group.addAction(a)
-		group.setExclusive(True)
-
-		proxy = self.addWidget(toolbar)
-		height = toolbar.minimumHeight() + 1
-		rect = QtCore.QRectF(0, 0, settings.board_size, height)
-		proxy.setGeometry(rect)
-		self.board.setPos(0, height)
-
-
 		#move_table 
-		toolbar = ToolBar()
-		self.move_table = MoveTable(toolbar, self.board, game_engine)
+		self.move_table = MoveTable(self.board, game_engine)
 		self.board.boardChanged.connect(self.move_table.resetEngine)
 
-		x, y = settings.board_size + 1, height
-		proxy = self.addWidget(self.move_table)
-		w = self.move_table.rect().width()
-		rect = QtCore.QRectF(0, height, w , settings.board_size)
-		proxy.setGeometry(rect)
-		proxy.setPos(x, y)
-
-		#move_table toolbar
-		proxy = self.addWidget(toolbar)
-		rect = QtCore.QRectF(0, 0, w, height)
-		proxy.setGeometry(rect)
-		proxy.setPos(x, 0)
-
+		x, y = settings.board_size + 5, 0
+		self.addItem(self.move_table)
+		self.move_table.setPos(x, y)
 
 		#opening_table
 		#self.opening_table = OpeningTable()
@@ -719,7 +699,6 @@ class ChessScene(QtGui.QGraphicsScene):
 		self.move_table.setEngine(game_engine)
 	
 
-
 	def onVariationSelected(self, from_square, to_square, subject, target):
 		
 		# go back on move
@@ -731,19 +710,93 @@ class ChessScene(QtGui.QGraphicsScene):
 		self.onNewMove(from_square, to_square, subject, target)
 
 
-class ChessView(QtGui.QGraphicsView):
+class BoardView(QtGui.QWidget):
+
+	def __init__(self, scene, w, h):
+
+		super(BoardView, self).__init__()
+		self.view = QtGui.QGraphicsView(scene)
+		self.view.setSceneRect(0, 0, w, h)
+
+		self.toolbar = ToolBar()
+
+		self.toolbar.addAction("New", 'first_move', tr("new game"), self.newGame, 'document-new')
+
+		layout = QtGui.QVBoxLayout()
+		layout.addWidget(self.toolbar)
+		layout.addWidget(self.view)
+		self.setLayout(layout)
+	
+	def newGame(self):
+		pass
+
+
+class SideBarView(QtGui.QWidget):
+	def __init__(self, scene, w, h):
+		super(SideBarView, self).__init__()
+
+		self.view = QtGui.QGraphicsView(scene)
+		self.view.setSceneRect(w, 0, 200, h)
+		self.setGeometry(0, 0, 200, h)
+
+		self.toolbar = ToolBar()
+
+		group = QtGui.QActionGroup(self.toolbar)
+		group.setExclusive(True)
+
+		a = self.toolbar.addAction("Play", 'first_move', tr("play game"), self.onShowMoves, 'media-playback-start') 
+		a.setCheckable(True)
+		a.setChecked(True)
+		group.addAction(a)
+
+		a = self.toolbar.addAction("Set", 'first_move', tr("set board"), self.onShowPallete, 'document-edit')
+		a.setCheckable(True)
+		group.addAction(a)
+
+		layout = QtGui.QVBoxLayout()
+		layout.addWidget(self.toolbar)
+		layout.addWidget(self.view)
+		self.setLayout(layout)
+
+	
+	def onShowMoves(self):
+		pass
+	def onShowPallete(self):
+		pass
+
+
+class ChessWidget(QtGui.QWidget):
 
 	direction_pressed = QtCore.pyqtSignal(str)
 	
-	def __init__(self, scene):
-		super(ChessView, self).__init__(scene)
+	def __init__(self):
+		super(ChessWidget, self).__init__()
 
 		#self.direction_pressed.connect(
 		#	scene.board.cursor.onDirectionPressed)
 
-	def keyPressEvent(self, event):
+		game_engine = DumbGameEngine()
+		self.scene = ChessScene(game_engine)
 
-		scene = self.scene()
+		w = settings.board_size + 6
+		h = settings.board_size + 32 + 16
+
+		board = BoardView(self.scene, w, h)
+		sidebar = SideBarView(self.scene, w, h)
+		
+		layout = QtGui.QHBoxLayout()
+		layout.addWidget(board)
+		layout.addWidget(sidebar)
+		self.setLayout(layout)
+		#fixed
+		layout.setSizeConstraint(3)
+
+		self.setGeometry(0, 0, w*2, h)
+
+	def loadGame(self, moves):
+		self.scene.loadGame(moves)
+
+	def keyPressEvent(self, event):
 
 		if event.key() == QtCore.Qt.Key_Escape:
 			self.close()
@@ -769,7 +822,7 @@ class ChessView(QtGui.QGraphicsView):
 		elif event.key() == settings.keys['cursor_select']:
 			self.direction_pressed.emit('select')
 
-		super(ChessView, self).keyPressEvent(event)
+		super(ChessWidget, self).keyPressEvent(event)
 
 	def toggleLabels(self):
 		self.scene().toggleLabels()
@@ -787,20 +840,18 @@ if __name__ == '__main__':
 
 	app = QtGui.QApplication(sys.argv)
 
-	game_engine = DumbGameEngine()
-	scene = ChessScene(game_engine)
-	view = ChessView(scene)
 
-	s = settings.board_size
-	l = settings.square_size
-	view.setGeometry(100, 0, 820, 600)
+	widget = ChessWidget()
+	icon = QtGui.QIcon('media/chess.ico')
+	widget.setWindowIcon(icon)
+	widget.setWindowTitle('ChessJay')
+	widget.show()
 
-	view.show()
 
 	import db
 	moves = []
 	for row in db.Moves.select(1):
 		moves.append(row)
-	scene.loadGame(moves)
+	widget.loadGame(moves)
 
 	sys.exit(app.exec_())
