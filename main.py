@@ -93,8 +93,11 @@ if __name__ == '__main__':
 
 	s = settings.board_size
 	l = settings.square_size
-	mainWindow.setGeometry(100, 0, 1200, 600)
+	#mainWindow.setGeometry(100, 0, 1200, 600)
 
+	icon = QtGui.QIcon('media/chess.ico')
+	mainWindow.setWindowIcon(icon)
+	mainWindow.setWindowTitle('ChessJay')
 	mainWindow.show()
 
 	import db
