@@ -5,39 +5,64 @@ Copyright Nate Carson 2012
 from PyQt4 import QtCore, QtGui
 
 from db import Moves, Opening
-from util import tr
+from util import tr, ToolBar
 from game_engine import BoardString, GameMove
 import settings
 
 
-class TableWidget(QtGui.QTableWidget):
-	COLUMN_WIDTH = 60
 
-	def __init__(self, toolbar):
+
+class TableWidget(QtGui.QTableWidget):
+	#COLUMN_WIDTH = 60
+
+	def __init__(self):
 		super(TableWidget, self).__init__()
 
 		self.setColumnCount(len(self.labels))
 		labels = []
 		for idx, label in enumerate(self.labels):
-			#if label.startswith('_'):
-			#	self.setColumnHidden(idx, True)
 			labels.append(tr(label))
 			#self.setColumnWidth(idx, self.COLUMN_WIDTH)
+
 		self.setHorizontalHeaderLabels(labels)
-
 		self.setEditTriggers(QtGui.QAbstractItemView.NoEditTriggers)
-
-		#self.itemActivated.connect(self.onItemSelected)
-		#self.itemClicked.connect(self.onItemSelected)
 		self.currentCellChanged.connect(self.onCellChanged)
 
-		self.toolbar = toolbar
-	
+		self.toolbar = ToolBar()
+		'''
+		self.container = QtGui.QGraphicsWidget()
 
-	def __getitem__(self, rowname):
-		row, name = rowname
-		column = self.labels.index(name)
-		return self.item(row, column).text()
+		layout = QtGui.QGraphicsLinearLayout()
+		layout.setOrientation(QtCore.Qt.Vertical)
+
+		proxy = QtGui.QGraphicsProxyWidget()
+		proxy.setWidget(self.toolbar)
+		layout.addItem(proxy)
+
+		proxy = QtGui.QGraphicsProxyWidget()
+		proxy.setWidget(self)
+		layout.addItem(proxy)
+
+		layout.setContentsMargins(0,0,0,0)
+		layout.setSpacing(0)
+		self.container.setLayout(layout)
+		'''
+
+		layout = QtGui.QVBoxLayout()
+
+		layout.addWidget(self.toolbar)
+		layout.addWidget(self)
+		layout.setContentsMargins(0,0,0,0)
+		layout.setSpacing(0)
+
+		self.container = QtGui.QWidget()
+		self.container.setLayout(layout)
+	
+	def hide(self):
+		self.container.hide()
+
+	def show(self):
+		self.container.show()
 
 
 
@@ -136,51 +161,6 @@ class VariationsTable(TableWidget):
 
 
 
-class MoveList(list):
-	
-	def __init__(self):
-		super(MoveList, self).__init__()
-
-		self._current = None
-	
-	def toCurrentSlice(self):
-		'''Return new move list up to but not including the current move.'''
-
-		ml = MoveList()
-
-		if not self._current:
-			return ml
-		if not self:
-			raise ValueError("Moves list is emtpy")
-
-		for move in self:
-			ml.append(move)
-			if move == self._current:
-				return ml
-		raise ValueError("current move was not found")
-	
-	def getNewMoveNum(self):
-
-		# if not current we are on the first move
-		if self._current is None:
-			# if the first move starts with blacks go
-			if self and self[0].iswhite == False:
-				return 1, False
-			else:
-				return 1, True
-
-		idx = self.index(self._current) + 1
-		return (idx / 2 + 1, not(idx % 2))
-	
-	def diff(self, move):
-		return self._current and self.index(move) - self.index(self._current)
-	
-	def setCurrent(self, move):
-		
-		if move is not None:
-			# make sure its in there
-			self.index(move)
-		self._current = move
 	
 
 class MoveItem(QtGui.QTableWidgetItem):
@@ -197,8 +177,8 @@ class MoveTable(TableWidget):
 
 	moveMade = QtCore.pyqtSignal(GameMove)
 
-	def __init__(self, toolbar, board, game_engine):
-		super(MoveTable, self).__init__(toolbar)
+	def __init__(self, board, game_engine):
+		super(MoveTable, self).__init__()
 
 		self.board = board
 		self.game_engine = game_engine
@@ -206,11 +186,11 @@ class MoveTable(TableWidget):
 
 		self.board.newMove.connect(self.onNewMove)
 
-		self.toolbar.addAction("|<", 'first_move', tr("first move"), self.firstMove)
-		self.toolbar.addAction("<", 'previous_move', tr("previous move"), self.previousMove)
-		self.toolbar.addAction(">", 'next_move', tr("next move"), self.nextMove)
-		self.toolbar.addAction(">|", 'last_move', tr("last move"), self.lastMove)
-		self.toolbar.addAction("R", 'reload_board', tr("reload board"), self.reload)
+		self.toolbar.addAction("|<", 'first_move', tr("first move"), self.firstMove, 'go-first')
+		self.toolbar.addAction("<", 'previous_move', tr("previous move"), self.previousMove, 'go-previous')
+		self.toolbar.addAction(">", 'next_move', tr("next move"), self.nextMove, 'go-next')
+		self.toolbar.addAction(">|", 'last_move', tr("last move"), self.lastMove, 'go-last')
+		self.toolbar.addAction("R", 'reload_board', tr("reload board"), self.reload, 'edit-redo')
 
 	
 	def newGame(self):
@@ -280,34 +260,6 @@ class MoveTable(TableWidget):
 	def previousMove(self):
 		self._setCurrent(0, -1)
 
-	def onNewMove(self, move):
-
-		print 99, move
-		if not self.game_engine.validateMove(move):
-			print 'did not validate'
-			#TODO we could beep here
-			return
-		else:
-			pass
-
-		# let the engine make the move
-		movenum, iswhite = self.move_list.getNewMoveNum()
-		game_move = self.game_engine.makeMove(move, movenum, iswhite)
-
-		# add the move into the list:
-		# if this is the first move of the game
-		if not self.move_list:
-			self.appendMove(game_move)
-
-		# else if this a new move to be appended to the game
- 		elif self.move_list[-1].halfmove() + 1 == game_move.halfmove():
-			self.appendMove(game_move)
-
-		# else we have a new variation
-		else:
-			self.setMoves(self.move_list.toCurrentSlice(), setmove=False)
-			self.move_list.current = game_move
-			self.appendMove(game_move)
 
 	def setMoves(self, moves, setmove=True):
 
@@ -334,12 +286,6 @@ class MoveTable(TableWidget):
 			self.setCurrentCell(row, col)
 
 
-	def _move_piece(self, move, uncapture=''):
-		#We need this to check for castling moves so we can move the rook.
-		self.board.movePiece(move, uncapture)
-		rook = self.game_engine.castleRookMove(move)
-		if rook:
-			self.board.movePiece(rook, uncapture)
 
 	def onCellChanged(self, cur_row, cur_col, prev_row, prev_col):
 
