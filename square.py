@@ -7,6 +7,7 @@ import settings
 
 
 class GraphicsWidget(QtGui.QGraphicsWidget):
+	'''Base class for widgets to handle animation.'''
 
 	def __init__(self):
 		super(GraphicsWidget, self).__init__()
@@ -38,6 +39,9 @@ class GraphicsWidget(QtGui.QGraphicsWidget):
 
 
 class SquareWidget(GraphicsWidget):
+	'''
+		Holds child items and handles signals and events for a chess square.
+	'''
 
 	squareSelected = QtCore.pyqtSignal(GraphicsWidget)
 	squareDoubleClicked = QtCore.pyqtSignal(GraphicsWidget)
@@ -54,6 +58,7 @@ class SquareWidget(GraphicsWidget):
 		self.label = SquareLabelItem(algsquare.label)
 		self.algsquare = algsquare
 		self._piece = None
+		self.guide = None
 
 		self.square.setParentItem(self)
 		self.label.setParentItem(self)
@@ -62,12 +67,15 @@ class SquareWidget(GraphicsWidget):
 		self.setAcceptDrops(True)
 		self.setFlag(QtGui.QGraphicsItem.ItemIsMovable, True)
 	
-	def __str__(self):
+	def __repr__(self):
 		return '<SquareWidget %s>' % self.algsquare
 	
 	def setSelected(self, selected):
 		self.square.setSelected(selected)
-
+	
+	def addGuide(self, guide):
+		guide.setParentItem(self)
+		self.guide = guide
 
 	def addPiece(self, piece):
 		piece.setParentItem(self)
@@ -128,36 +136,59 @@ class SquareWidget(GraphicsWidget):
 		drag.setMimeData(mime)
 		self.pieceDragStart.emit(self)
 		drag.exec_()
+	
 
 
-
-class SquareLabelItem(QtGui.QGraphicsSimpleTextItem):
-	'''Item that shows the algbraic label for a square.'''
-
+class LabelItem(QtGui.QGraphicsRectItem):
 
 	def __init__(self, label):
 
-		super(SquareLabelItem, self).__init__(label)
+		super(LabelItem, self).__init__()
 
-		offset = settings.square_size / 10
-		self.setPos(offset, offset)
+		self.text = QtGui.QGraphicsSimpleTextItem(label)
+		self.text.setParentItem(self)
+
+		side = settings.square_size / 2.5
+		self.setRect(0, 0, side, side) 
+		#self.setBrush(QtGui.QBrush(QtGui.QColor('gray')))
+		self.setPen(QtGui.QPen(settings.COLOR_NONE))
+		self.setOpacity(.5)
+		self.setPos(1,1)
 		
-		if not settings.show_labels:
-			self.hide()
-
 		font = QtGui.QFont()
 		font.setBold(True)
-		self.setFont(font)
-
-		self.setBrush(QtGui.QBrush(settings.square_label_color))
+		self.text.setFont(font)
 	
+
+class SquareLabelItem(LabelItem):
+	'''Item that shows the algebraic label for a square.'''
+
+	def __init__(self, label):
+		super(SquareLabelItem, self).__init__(label)
+		self.text.setBrush(QtGui.QBrush(settings.square_label_color))
+		self.setVisible(settings.show_labels)
+
+class GuideLabelItem(LabelItem):
+	'''Item that shows the rank or file for board.'''
+
+	def __init__(self, label):
+		super(GuideLabelItem, self).__init__(label)
+		self.text.setBrush(QtGui.QBrush(settings.guide_color))
+		self.setVisible(settings.show_guides)
+
+
+
+
+
+
 
 
 
 class SquareItem(QtGui.QGraphicsRectItem):
 	'''
-		GraphicsItem represents a square of a board and may contain a piece. 
-		Sends square selected and hover drop signals for the board to handle.
+		GraphicsRectItem that represents a square of a board.
+
+		Can be selected or hovered over. Only knows if it is a light or dark square but can have a custom color.
 	'''
 
 	def __init__(self, islight):
@@ -212,7 +243,13 @@ class SquareItem(QtGui.QGraphicsRectItem):
 	
 
 class PieceWidget(QtSvg.QGraphicsSvgItem, GraphicsWidget):
-	'''Item that represents the piece on a square.'''
+	'''
+		Item that represents the piece on a square.
+
+		Can be arbitrary scaled.
+	'''
+
+	divisor = 12
 
 	name_map = {
 		'wp': 'P', 'wn': 'N', 'wb': 'B', 'wr': 'R', 'wq': 'Q', 'wk': 'K',
@@ -223,28 +260,30 @@ class PieceWidget(QtSvg.QGraphicsSvgItem, GraphicsWidget):
 		super(PieceWidget, self).__init__()
 
 		self.name = self.name_map[renderer.name]
-		#self.animation = MoveAnimation(self)
 
 		self.setSharedRenderer(renderer)
+		self.scale(settings.square_size)
 	
-		# scale the piece from its arbitrary svg size
+	
+	def scale(self, square_size):
+
+		renderer = self.renderer()
+
 		x = renderer.defaultSize().width()
 		y = renderer.defaultSize().height()
-		size = settings.square_size
 
-		scalex, scaley = x / float(size), y / float(size)
+		scalex, scaley = x / float(square_size), y / float(square_size)
 		if scalex > .75 or scaley > .75:
 			self.setScale(1 / (max([scalex, scaley]) + .25))
 
-		self.setPos(size / 12, size / 12)
+		offset = square_size / self.divisor
+		self.setPos(offset, offset)
+
 	
 	def __str__(self):
-		return '<PieceItem %s>' % self.name
-	
+		return '<PieceWidget %s>' % self.name
 	
 
-
-	
 
 class ChessFontRenderer(QtSvg.QSvgRenderer):
 	'''Holds the svg font for a chess font.'''
@@ -260,7 +299,7 @@ class ChessFontRenderer(QtSvg.QSvgRenderer):
 
 
 class ChessFontDict(dict):
-	'''Holds all svg chess fonts.'''
+	'''Holds all piece fotns for a particular svg chess font.'''
 	
 	def __init__(self, fontname):
 
@@ -274,12 +313,23 @@ class ChessFontDict(dict):
 if __name__ == '__main__':
 
 	class View(QtGui.QGraphicsView):
+		
 		def __init__(self, scene):
 			super(View, self).__init__(scene)
 
 		def keyPressEvent(self, event):
 			if event.key() == QtCore.Qt.Key_Escape:
 				self.close()
+
+		def resizeEvent(self, event):
+
+			old_side = min(event.oldSize().width(), event.oldSize().height())
+			new_side = min(event.size().width(), event.size().height())
+			if old_side == -1 or new_side == -1:
+				return
+
+			factor = float(new_side) / old_side 
+			self.scale(factor, factor)
 	
 	def onSelected(square):
 		print 99, square
@@ -301,7 +351,7 @@ if __name__ == '__main__':
 
 	font = ChessFontDict(settings.chess_font)
 
-	def makeSquare(label, piece):
+	def makeSquare(label, piece, view):
 		widget = SquareWidget(AlgSquare(label))
 		widget.squareSelected.connect(onSelected)
 		widget.squareDoubleClicked.connect(onDoubleClicked)
@@ -311,23 +361,23 @@ if __name__ == '__main__':
 		widget.pieceDragContinue.connect(onPieceDragContinue)
 
 		if piece:	
-			piece = PieceItem(font[piece])
+			piece = PieceWidget(font[piece])
 			widget.addPiece(piece)
 
 		return widget
-
 	
 	import sys
 	from game_engine import AlgSquare
 
 
 	app = QtGui.QApplication(sys.argv)
-
-	a = makeSquare('e1', 'p')
-	b = makeSquare('e2', 'K')
-	c = makeSquare('e3', '')
-
 	scene = QtGui.QGraphicsScene()
+	view = View(scene)
+
+	a = makeSquare('e1', 'p', view)
+	b = makeSquare('e2', 'K', view)
+	c = makeSquare('e3', '', view)
+
 	scene.addItem(a)
 	scene.addItem(b)
 	scene.addItem(c)
@@ -335,12 +385,11 @@ if __name__ == '__main__':
 	c.setPos(0, 100)
 
 
-	view = View(scene)
 	view.setGeometry(100, 100, 300, 300)
 	view.show()
 
 	pos = QtCore.QPointF(300, 300)
-	a._piece.fadeOut(1000)
+	#a._piece.fadeOut(1000)
 	#a._piece.move(pos, 1000)
 
 	sys.exit(app.exec_())

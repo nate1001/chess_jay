@@ -38,11 +38,8 @@ keys = {
 
 }
 
-
-
 piece_directory = os.getcwd() + media_piece
 chess_font = 'Internet'
-square_label_color = QtGui.QColor('red')
 square_light_color = QtGui.QColor('white')
 square_dark_color= QtGui.QColor('green')
 #square_dark_color= QtGui.QColor('white')
@@ -51,11 +48,10 @@ square_hover_color = QtGui.QColor('orange')
 square_selected_color = QtGui.QColor('orange')
 cursor_color = QtGui.QColor('magenta')
 cursor_selected_color = QtGui.QColor('red')
-guide_color = COLOR_NONE
+square_label_color = QtGui.QColor('red')
+guide_color = QtGui.QColor('red')
 show_labels = False
-show_guides = True
+show_guides = False
 animation_duration = 300
-
-
 
 

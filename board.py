@@ -5,7 +5,7 @@ Copyright Nate Carson 2012
 
 from PyQt4 import QtCore, QtGui
 
-from square import SquareWidget, ChessFontDict, PieceWidget, GraphicsWidget
+from square import SquareWidget, ChessFontDict, PieceWidget, GraphicsWidget, GuideLabelItem
 from game_engine import Move, AlgSquare, PalleteSquare, BoardString
 from util import tr
 import settings
@@ -63,6 +63,7 @@ class CursorWidget(GraphicsWidget):
 		board = self.parentWidget()
 		board.onSquareSelected(square)
 
+
 class CursorItem(QtGui.QGraphicsRectItem):
 	'''Rectangle Item to be used as a cursor for selecting squares with the keyboard.'''
 
@@ -70,15 +71,12 @@ class CursorItem(QtGui.QGraphicsRectItem):
 		super(CursorItem, self).__init__()
 
 		self._algsquare = algsquare
-		#self.animation = MoveAnimation(self)
 
 		length = settings.square_size
 		self.setRect(0, 0, length, length)
 		self.setPen(QtGui.QPen(settings.cursor_color, length / 15))
 		self._selected_pen = QtGui.QPen(settings.cursor_selected_color, length / 15)
 		self._none_pen = QtGui.QPen(settings.COLOR_NONE)
-
-
 
 
 class BoardItem(QtGui.QGraphicsRectItem):
@@ -148,12 +146,6 @@ class BoardItem(QtGui.QGraphicsRectItem):
 		side = settings.square_size
 		item.setPos((x-1) * side , (8 - y) * side)
 
-	def _createGuide(self, label, x, y):
-		guide = GuideItem(x, y, label, centered_label=True)
-		self._itemSetPos(guide, x, y)
-		guide.setParentItem(self)
-		return guide
-	
 	def _createPiece(self, square, symbol):
 		piece = PieceWidget(self._font[symbol])
 		square.addPiece(piece)
@@ -195,18 +187,9 @@ class BoardWidget(QtGui.QGraphicsWidget):
 
 		self.cursor = None
 
-		self._guides= {}
 		self._selected_square = None
 		self._editable = False
 
-		#self.setFlag(QtGui.QGraphicsItem.ItemIsFocusable, True)
-
-		# guides
-		#for f, r, idx in [(AlgSquare.files[i], AlgSquare.ranks[i], i) for i in range(len(AlgSquare.ranks))]:
-		#	self._guides[f] = self._createGuide(f, idx+1, 0)
-		#	self._guides[r] = self._createGuide(r, 0, idx+1)
-		#XXX we need this to overide default behavier of using square label_settings
-		#self.toggleGuides(), self.toggleGuides()
 
 
 	
@@ -332,15 +315,15 @@ class BoardWidget(QtGui.QGraphicsWidget):
 		'''Shows algabraic labels inside the squares.'''
 		
 		settings.show_labels = not settings.show_labels
-		for square in self._squares.values():
+		for square in self.squares:
 			square.label.setVisible(settings.show_labels)
 
 	def toggleGuides(self):
 		'''Shows file and rank guides at the side of the board.'''
 		
 		settings.show_guides = not settings.show_guides
-		for guide in self._guides.values():
-			guide.label.setVisible(settings.show_guides)
+		for square in self.squares:
+			square.guide and square.guide.setVisible(settings.show_guides)
 	
 	def setEditable(self, editable):
 		self._editable = editable
@@ -350,18 +333,11 @@ class BoardWidget(QtGui.QGraphicsWidget):
 		for square in self.squares:
 			square.squareSelected.connect(self.onSquareSelected)
 			square.squareDoubleClicked.connect(self.onSquareDoubleClicked)
-
-	
-
-
-#class GuideItem(SquareItem):
-#	'''Item that shows the rank or file for a board.'''
-#	def __init__(self, x, y, algsquare, centered_label):
-#		super(GuideItem, self).__init__(x, y, algsquare, centered_label)
-#
-#	def _setColor(self):
-#		self.setPen(QtGui.QPen(settings.COLOR_NONE))
-#		self.setBrush(QtGui.QBrush(settings.guide_color))
+			file, rank = square.algsquare.label
+			if rank == '1':
+				square.addGuide(GuideLabelItem(file))
+			if file == 'a':
+				square.addGuide(GuideLabelItem('  ' + rank))
 
 
 
@@ -434,6 +410,8 @@ if __name__ == '__main__':
 	board.newMove.connect(onMove)
 	board.boardChanged.connect(onBoardChanged)
 	board.setEditable(True)
+	#board.toggleGuides()
+	#board.toggleLabels()
 	view.directionPressed.connect(board.squares.cursor.onDirectionPressed)
 
 	scene.addItem(board)
