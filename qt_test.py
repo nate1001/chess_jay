@@ -10,15 +10,26 @@ class RectItem(QtGui.QGraphicsRectItem):
 		self.setBrush(QtGui.QBrush(QtGui.QColor('blue')))
 
 
-class View(QtGui.QGraphicsView):
-	def __init__(self, scene):
-		super(View, self).__init__(scene)
-
-	def keyPressEvent(self, event):
-		if event.key() == QtCore.Qt.Key_Escape:
-			self.close()
 
 if __name__ == '__main__':
+
+	class View(QtGui.QGraphicsView):
+		def __init__(self, scene):
+			super(View, self).__init__(scene)
+
+		def keyPressEvent(self, event):
+			if event.key() == QtCore.Qt.Key_Escape:
+				self.close()
+
+		def resizeEvent(self, event):
+
+			old_side = min(event.oldSize().width(), event.oldSize().height())
+			new_side = min(event.size().width(), event.size().height())
+			if old_side == -1 or new_side == -1:
+				return
+
+			factor = float(new_side) / old_side 
+			self.scale(factor, factor)
 
 	
 	import sys
@@ -28,6 +39,7 @@ if __name__ == '__main__':
 	scene = QtGui.QGraphicsScene()
 	scene.addItem(item)
 	view = View(scene)
+	view.setGeometry(100, 100, 300, 300)
 	view.show()
 
 	sys.exit(app.exec_())
