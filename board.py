@@ -5,36 +5,30 @@ Copyright Nate Carson 2012
 
 from PyQt4 import QtCore, QtGui
 
-from square import SquareWidget, ChessFontDict, PieceWidget
-
-
-from move_list import MoveTable
-from game_engine import Move, AlgSquare, PalleteSquare, BoardString, Piece
-from util import tr, ToolBar
+from square import SquareWidget, ChessFontDict, PieceWidget, GraphicsWidget
+from game_engine import Move, AlgSquare, PalleteSquare, BoardString
+from util import tr
 import settings
 
+
+class MoveError(Exception): pass
 	
 
-class CursorItem(QtGui.QGraphicsRectItem):
-	'''Rectangle Item to be used as a cursor for selecting squares with the keyboard.'''
-
-	def __init__(self, algsquare):
-		super(CursorItem, self).__init__()
-
-		self._algsquare = algsquare
-		#self.animation = MoveAnimation(self)
-
-		length = settings.square_size
-		self.setRect(0, 0, length, length)
-		self.setPen(QtGui.QPen(settings.cursor_color, length / 15))
-		self._selected_pen = QtGui.QPen(settings.cursor_selected_color, length / 15)
-		self._none_pen = QtGui.QPen(settings.COLOR_NONE)
-
+class CursorWidget(GraphicsWidget):
+	
+	def __init__(self, squares, algsquare):
+		super(CursorWidget, self).__init__()
+		self.item = CursorItem(algsquare)
+		self.item.setParentItem(self)
+		self._squares = squares
+	
+	def _getSquares(self):
+		return self.parentWidget().squares
 
 	def onDirectionPressed(self, direction):
 		
-		board = self.parentWidget()
-		old = board._squares[self._algsquare.label]
+		squares = self._getSquares()
+		old = squares[self.item._algsquare.label].algsquare
 		x, y = old.x, old.y
 
 		if direction == 'north':
@@ -59,20 +53,32 @@ class CursorItem(QtGui.QGraphicsRectItem):
 		else:
 			raise ValueError(direction)
 
-		if not board._squares_by_xy.has_key((x, y)):
-			return
-
-		new = board._squares_by_xy[(x, y)]
-		self._algsquare = new.algsquare
-		self.animation.move(new.pos())
+		new = squares.getSquare(x, y)
+		self.item._algsquare = new.algsquare
+		self.move(new.pos(), settings.animation_duration)
 
 	def cursorSelect(self):
+		squares = self._getSquares()
+		square = squares[self.item._algsquare.label]
 		board = self.parentWidget()
-		square = board._squares[self._algsquare.label]
 		board.onSquareSelected(square)
 
+class CursorItem(QtGui.QGraphicsRectItem):
+	'''Rectangle Item to be used as a cursor for selecting squares with the keyboard.'''
 
-class MoveError(Exception): pass
+	def __init__(self, algsquare):
+		super(CursorItem, self).__init__()
+
+		self._algsquare = algsquare
+		#self.animation = MoveAnimation(self)
+
+		length = settings.square_size
+		self.setRect(0, 0, length, length)
+		self.setPen(QtGui.QPen(settings.cursor_color, length / 15))
+		self._selected_pen = QtGui.QPen(settings.cursor_selected_color, length / 15)
+		self._none_pen = QtGui.QPen(settings.COLOR_NONE)
+
+
 
 
 class BoardItem(QtGui.QGraphicsRectItem):
@@ -84,6 +90,7 @@ class BoardItem(QtGui.QGraphicsRectItem):
 		self._squares = {}
 		self._squares_by_xy = {}
 		self._font = None
+		self.cursor = None
 
 		self.setRect(0,0, settings.board_size, settings.board_size)
 	
@@ -96,6 +103,12 @@ class BoardItem(QtGui.QGraphicsRectItem):
 	
 	def __str__(self):
 		return "<BoardItem %s>" % self.toString()
+	
+	def getSquare(self, x, y):	
+		for square in self:
+			if square.algsquare.x == x and square.algsquare.y == y:
+				return square
+		raise KeyError((x, y))
 
 	def setBoard(self, boardstring):
 
@@ -112,6 +125,12 @@ class BoardItem(QtGui.QGraphicsRectItem):
 			symbol = boardstring[idx]
 			square = self._createSquare(algsquare, symbol)
 
+		if self.cursor is None:
+			s = self['e4'].algsquare
+			self.cursor = CursorWidget(self, s)
+			self.cursor.setParentItem(self)
+			self._itemSetPos(self.cursor, s.x, s.y)
+
 	def toString(self):
 		algsquares = list(AlgSquare.generate())
 		string = list(BoardString.EMPTY_SQUARE * len(algsquares))
@@ -126,8 +145,8 @@ class BoardItem(QtGui.QGraphicsRectItem):
 		return ((8-y) * 8) + x - 1 
 	
 	def _itemSetPos(self, item, x, y):
-		length = settings.square_size
-		item.setPos((x-1) * length , (8 - y) * length )
+		side = settings.square_size
+		item.setPos((x-1) * side , (8 - y) * side)
 
 	def _createGuide(self, label, x, y):
 		guide = GuideItem(x, y, label, centered_label=True)
@@ -189,12 +208,6 @@ class BoardWidget(QtGui.QGraphicsWidget):
 		#XXX we need this to overide default behavier of using square label_settings
 		#self.toggleGuides(), self.toggleGuides()
 
-		#cursor - init once
-		#if self.cursor is None:
-			#s = self._squares['e4']
-			#self.cursor = CursorItem(s.algsquare)
-			#self.cursor.setParentItem(self)
-			#self._itemSetPos(self.cursor, s.x, s.y)
 
 	
 	def movePiece(self, move, uncapture=None):
@@ -297,7 +310,7 @@ class BoardWidget(QtGui.QGraphicsWidget):
 				# else it is a standard move
 				else:
 					move = Move(str(ssquare) + str(esquare))
-					# if we are editing just move the piece
+					# if we are editing then just move the piece
 					if self._editable:
 						self.movePiece(move)
 						self.boardChanged.emit(self.squares.toString())
@@ -337,11 +350,7 @@ class BoardWidget(QtGui.QGraphicsWidget):
 		for square in self.squares:
 			square.squareSelected.connect(self.onSquareSelected)
 			square.squareDoubleClicked.connect(self.onSquareDoubleClicked)
-	
-	def sizeHint(self, which, constraint):
-		side = settings.board_size
-		return QtCore.QSizeF(side, side)
-	
+
 	
 
 
@@ -359,12 +368,51 @@ class BoardWidget(QtGui.QGraphicsWidget):
 if __name__ == '__main__':
 
 	class View(QtGui.QGraphicsView):
+
+		directionPressed = QtCore.pyqtSignal(str)
+
 		def __init__(self, scene):
 			super(View, self).__init__(scene)
 
 		def keyPressEvent(self, event):
+
 			if event.key() == QtCore.Qt.Key_Escape:
 				self.close()
+
+			if event.key() == settings.keys['cursor_south']:
+				self.directionPressed.emit('south')
+			elif event.key() == settings.keys['cursor_north']:
+				self.directionPressed.emit('north')
+			elif event.key() == settings.keys['cursor_west']:
+				self.directionPressed.emit('west')
+			elif event.key() == settings.keys['cursor_east']:
+				self.directionPressed.emit('east')
+
+			elif event.key()  == settings.keys['cursor_northwest']:
+				self.directionPressed.emit('northwest')
+			elif event.key() == settings.keys['cursor_northeast']:
+				self.directionPressed.emit('northeast')
+			elif event.key() == settings.keys['cursor_southwest']:
+				self.directionPressed.emit('southwest')
+			elif event.key() == settings.keys['cursor_southeast']:
+				self.directionPressed.emit('southeast')
+
+			elif event.key() == settings.keys['cursor_select']:
+				self.directionPressed.emit('select')
+
+			super(View, self).keyPressEvent(event)
+
+
+		def resizeEvent(self, event):
+
+			# find the largest square for old and new and resize to the ratio
+
+			old_side = min(event.oldSize().width(), event.oldSize().height())
+			new_side = min(event.size().width(), event.size().height())
+			if old_side == -1 or new_side == -1:
+				return
+			factor = float(new_side) / old_side 
+			self.scale(factor, factor)
 	
 	def onMove(move):
 		print 11, move
@@ -373,9 +421,11 @@ if __name__ == '__main__':
 
 	import sys
 
-	from game_engine import BoardString
-
 	app = QtGui.QApplication(sys.argv)
+	scene = QtGui.QGraphicsScene()
+	# XXX must construct view before adding stuff to scene or
+	# 	  recursive ghost resize events occur.
+	view = View(scene)
 
 	string = str(BoardString())
 
@@ -384,17 +434,16 @@ if __name__ == '__main__':
 	board.newMove.connect(onMove)
 	board.boardChanged.connect(onBoardChanged)
 	board.setEditable(True)
+	view.directionPressed.connect(board.squares.cursor.onDirectionPressed)
 
-	scene = QtGui.QGraphicsScene()
 	scene.addItem(board)
 
-	view = View(scene)
 	side = settings.board_size + 9
 	view.setGeometry(100, 100, side, side)
 	view.show()
 
-	print board.minimumSize()
-	print board.maximumSize()
-	print board.preferredSize()
+	#print board.minimumSize()
+	#print board.maximumSize()
+	#print board.preferredSize()
 
 	sys.exit(app.exec_())
