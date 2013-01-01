@@ -5,92 +5,25 @@ Copyright Nate Carson 2012
 
 from PyQt4 import QtCore, QtGui
 
-from square import SquareWidget, ChessFontDict, PieceWidget, GraphicsWidget, GuideLabelItem
-from game_engine import Move, AlgSquare, PalleteSquare, BoardString
-from util import tr
+from square import SquareWidget, ChessFontDict, PieceWidget, GuideLabelItem
+from game_engine import Move, AlgSquare, PalleteSquare, BoardString, Piece
+from util import tr, GraphicsWidget
 import settings
 
 
 class MoveError(Exception): pass
-	
-
-class CursorWidget(GraphicsWidget):
-	
-	def __init__(self, squares, algsquare):
-		super(CursorWidget, self).__init__()
-		self.item = CursorItem(algsquare)
-		self.item.setParentItem(self)
-		self._squares = squares
-	
-	def _getSquares(self):
-		return self.parentWidget().squares
-
-	def onDirectionPressed(self, direction):
-		
-		squares = self._getSquares()
-		old = squares[self.item._algsquare.label].algsquare
-		x, y = old.x, old.y
-
-		if direction == 'north':
-			y += 1
-		elif direction == 'south':
-			y -= 1
-		elif direction == 'west':
-			x -= 1
-		elif direction == 'east':
-			x += 1
-		elif direction == 'northeast':
-			x += 1; y += 1
-		elif direction == 'northwest':
-			y += 1; x -= 1
-		elif direction == 'southwest':
-			y -= 1; x -= 1
-		elif direction == 'southeast':
-			y -= 1; x += 1
-		elif direction == 'select':
-			self.cursorSelect()
-			return
-		else:
-			raise ValueError(direction)
-
-		new = squares.getSquare(x, y)
-		self.item._algsquare = new.algsquare
-		self.move(new.pos(), settings.animation_duration)
-
-	def cursorSelect(self):
-		squares = self._getSquares()
-		square = squares[self.item._algsquare.label]
-		board = self.parentWidget()
-		board.onSquareSelected(square)
-
-
-class CursorItem(QtGui.QGraphicsRectItem):
-	'''Rectangle Item to be used as a cursor for selecting squares with the keyboard.'''
-
-	def __init__(self, algsquare):
-		super(CursorItem, self).__init__()
-
-		self._algsquare = algsquare
-
-		length = settings.square_size
-		self.setRect(0, 0, length, length)
-		self.setPen(QtGui.QPen(settings.cursor_color, length / 15))
-		self._selected_pen = QtGui.QPen(settings.cursor_selected_color, length / 15)
-		self._none_pen = QtGui.QPen(settings.COLOR_NONE)
 
 
 class BoardItem(QtGui.QGraphicsRectItem):
-	
+
 	def __init__(self):
-		
 		super(BoardItem, self).__init__()
 
 		self._squares = {}
-		self._squares_by_xy = {}
 		self._font = None
-		self.cursor = None
 
 		self.setRect(0,0, settings.board_size, settings.board_size)
+
 	
 	def __getitem__(self, key):
 		return self._squares[key]
@@ -107,27 +40,21 @@ class BoardItem(QtGui.QGraphicsRectItem):
 			if square.algsquare.x == x and square.algsquare.y == y:
 				return square
 		raise KeyError((x, y))
-
+	
 	def setBoard(self, boardstring):
 
 		self._font = ChessFontDict(settings.chess_font)
 
-		#clear out pieces if any
+		#clear the old squares
 		for square in self._squares.itervalues():
-			if square.getPiece():
-				square.removePiece()
+			if self.scene():
+				self.scene().removeItem(square)
+			else:
+				square.setParentItem(None)
+				square.square.setParentItem(None)
+		self._squares = {}
 
-		# AlgSquares
-		for algsquare in AlgSquare.generate():
-			idx = self._toboardnum(algsquare.x, algsquare.y)
-			symbol = boardstring[idx]
-			square = self._createSquare(algsquare, symbol)
-
-		if self.cursor is None:
-			s = self['e4'].algsquare
-			self.cursor = CursorWidget(self, s)
-			self.cursor.setParentItem(self)
-			self._itemSetPos(self.cursor, s.x, s.y)
+		self._createSquares(boardstring)
 
 	def toString(self):
 		algsquares = list(AlgSquare.generate())
@@ -138,6 +65,13 @@ class BoardItem(QtGui.QGraphicsRectItem):
 			if piece:
 				string[idx] = piece.name
 		return ''.join(string)
+	
+	def _createSquares(self, boardstring):
+		# AlgSquares
+		for algsquare in AlgSquare.generate():
+			idx = self._toboardnum(algsquare.x, algsquare.y)
+			symbol = boardstring[idx]
+			square = self._createSquare(algsquare, symbol)
 
 	def _toboardnum(self, x, y):
 		return ((8-y) * 8) + x - 1 
@@ -156,17 +90,43 @@ class BoardItem(QtGui.QGraphicsRectItem):
 		self._itemSetPos(square, algsquare.x, algsquare.y)
 		square.setParentItem(self)
 		self._squares[square.algsquare.label] = square
-		self._squares_by_xy[(algsquare.x, algsquare.y)] = square
-
 
 		if symbol != BoardString.EMPTY_SQUARE:
 			self._createPiece(square, symbol)
 
 		return square
 
+class PaletteWidget(GraphicsWidget):
+	def __init__(self, palette):
+		super(PaletteWidget, self).__init__()
+		palette.setParentItem(self)
+		self.palette = palette
 
 
-class BoardWidget(QtGui.QGraphicsWidget):
+class PaletteItem(BoardItem):
+	def __init__(self):
+		super(PaletteItem, self).__init__()
+		side = settings.square_size
+		self.setRect(0,0, side * 2, side * 6)
+
+	def _createSquares(self, boardstring):
+		# PalleteSquares
+		for idx, algsquare in enumerate(PalleteSquare.generate()):
+			symbol = Piece.pieces[idx]
+			square = self._createSquare(algsquare, symbol)
+			square.square.setCustomColor(settings.COLOR_NONE)
+	
+	def _createCursor(self):
+		pass
+
+	def _itemSetPos(self, item, x, y):
+		super(PaletteItem, self)._itemSetPos(item, x - 8, y)
+	
+	def __str__(self):
+		return '<PaletteItem>'
+
+
+class BoardWidget(GraphicsWidget):
 	'''
 		BoardWidget keeps tracks of the squares and moves pieces around.
 		The newMove signal will be emitted when two squares with pieces are clicked
@@ -177,13 +137,20 @@ class BoardWidget(QtGui.QGraphicsWidget):
 
 	newMove = QtCore.pyqtSignal(Move)
 	boardChanged = QtCore.pyqtSignal(str)
-	pieceRemoved = QtCore.pyqtSignal(PieceWidget)
+
+	spacing = 10
 
 	def __init__(self):
 		super(BoardWidget, self).__init__()
 
 		self.squares = BoardItem()
+		self.palette = PaletteItem()
+		self.palette_widget = PaletteWidget(self.palette)
+
 		self.squares.setParentItem(self)
+		self.palette.setParentItem(self)
+
+		self.palette.setPos(settings.board_size + self.spacing, 0)
 
 		self.cursor = None
 
@@ -191,8 +158,6 @@ class BoardWidget(QtGui.QGraphicsWidget):
 		self._editable = False
 
 
-
-	
 	def movePiece(self, move, uncapture=None):
 		'''
 			Makes the appropiate move or raises a value error.
@@ -207,13 +172,13 @@ class BoardWidget(QtGui.QGraphicsWidget):
 
 		# if its a capture
 		if tosquare.getPiece():
-			self._removePiece(tosquare)
+			captured = self._removePiece(tosquare)
 		else:
 			captured = None
 
 		# remove the old piece
 		try:
-			piece = fromsquare.removePiece()
+			piece = self._removePiece(fromsquare, nofade=True)
 		except ValueError:
 			raise MoveError(move)
 			
@@ -238,26 +203,26 @@ class BoardWidget(QtGui.QGraphicsWidget):
 		if uncapture:
 			self._addPiece(fromsquare, uncapture)
 	
-	def _removePiece(self, square):
+	def _removePiece(self, square, nofade=False):
 		piece = square.removePiece()
-		piece.fadeOut(settings.animation_duration)
-		self.pieceRemoved.emit(piece)
+		if not nofade:
+			piece.fadeOut(settings.animation_duration)
+		return piece
 	
 	def _addPiece(self, square, symbol):
-		piece = PieceItem(square, self._font[symbol])
-		piece.fadeIn(duration)
+		piece = PieceWidget(self.squares._font[symbol])
+		piece.fadeIn(settings.animation_duration)
 		square.addPiece(piece)
 
 	def onSquareDoubleClicked(self, square):
 		if self._editable and not square.algsquare.isPallete() and square.getPiece():
 			self._removePiece(square)
+			self.boardChanged.emit(self.squares.toString())
 		self._selected_square = None
 		square.setSelected(False)
-		self.boardChanged.emit(self.squares.toString())
 	
 	def onSquareSelected(self, square):
 		'''Catches squareSelected signal from squares and keeps track of currently selected square.'''
-
 
 		tosquare, fromsquare = square, self._selected_square
 
@@ -272,14 +237,14 @@ class BoardWidget(QtGui.QGraphicsWidget):
 			ssquare = self._selected_square.algsquare
 			esquare = square.algsquare
 
-			# we cannot drop onto the pallete
+			# we cannot drop onto the palette
 			if esquare.isPallete():
 				tosquare.setSelected(False)
 				return
 
 			# else we have a new move
 			else:
-				# if we adding from the pallete
+				# if we adding from the palette
 				if ssquare.isPallete():
 					if self._editable:
 						if tosquare.getPiece():
@@ -287,7 +252,7 @@ class BoardWidget(QtGui.QGraphicsWidget):
 						self._addPiece(tosquare, fromsquare.getPiece().name)
 						self.boardChanged.emit(self.squares.toString())
 					else:
-						# we cannot use the pallete if we are not editing
+						# we cannot use the palette if we are not editing
 						pass
 
 				# else it is a standard move
@@ -326,10 +291,30 @@ class BoardWidget(QtGui.QGraphicsWidget):
 			square.guide and square.guide.setVisible(settings.show_guides)
 	
 	def setEditable(self, editable):
+		if editable:
+			self.palette.show()
+		else:
+			self.palette.hide()
 		self._editable = editable
 	
+	def _getSquareAll(self, x, y):
+
+		try:
+			return self.squares.getSquare(x, y)
+		except KeyError:
+			return self.palette.getSquare(x, y)
+	
+	def _onMoveCursor(self, square):
+
+		if square.algsquare.isPallete():
+			pos = self.palette.mapToItem(self, square.pos())
+		else:
+			pos = square.pos()
+
+		self.cursor.move(pos, settings.animation_duration)
+	
 	def setBoard(self, boardstring):
-		self.squares.setBoard(boardstring)
+		self.squares.setBoard(str(boardstring))
 		for square in self.squares:
 			square.squareSelected.connect(self.onSquareSelected)
 			square.squareDoubleClicked.connect(self.onSquareDoubleClicked)
@@ -339,8 +324,99 @@ class BoardWidget(QtGui.QGraphicsWidget):
 			if file == 'a':
 				square.addGuide(GuideLabelItem('  ' + rank))
 
+		self.palette.setBoard(None)
+		for square in self.palette:
+			square.squareSelected.connect(self.onSquareSelected)
+
+		if self.cursor is None:
+			square = self.squares['e4']
+			self.cursor = CursorWidget(self._getSquareAll, square.algsquare)
+			self.cursor.setParentItem(self)
+			self.cursor.setPos(square.pos())
+			self.cursor.setZValue(2)
+			self.cursor.moveCursor.connect(self._onMoveCursor)
+	
+	def cursorSetEnabled(self, enable):
+		if enable:
+			self.cursor.show()
+		else:
+			self.cursor.hide()
+		self.cursor._enabled = enable
+	
 
 
+
+class CursorWidget(GraphicsWidget):
+	
+	moveCursor = QtCore.pyqtSignal(SquareWidget)
+
+	def __init__(self, getsquare_callback, algsquare):
+		super(CursorWidget, self).__init__()
+		self.item = CursorItem(algsquare)
+		self.item.setParentItem(self)
+		self.getsquare_callback = getsquare_callback
+
+		self._enabled = True
+	
+	def onDirectionPressed(self, direction):
+
+		if not self._enabled:
+			return
+		
+		old = self.item._algsquare
+		x, y = old.x, old.y
+
+		if direction == 'north':
+			y += 1
+		elif direction == 'south':
+			y -= 1
+		elif direction == 'west':
+			x -= 1
+		elif direction == 'east':
+			x += 1
+		elif direction == 'northeast':
+			x += 1; y += 1
+		elif direction == 'northwest':
+			y += 1; x -= 1
+		elif direction == 'southwest':
+			y -= 1; x -= 1
+		elif direction == 'southeast':
+			y -= 1; x += 1
+		elif direction == 'select':
+			self.cursorSelect()
+			return
+		else:
+			raise ValueError(direction)
+
+		try:
+			square = self.getsquare_callback(x, y)
+			self.moveCursor.emit(square)
+		except KeyError:
+			return
+		self.item._algsquare = square.algsquare
+
+	def cursorSelect(self):
+
+		algsquare = self.item._algsquare
+		x, y = algsquare.x, algsquare.y
+		square = self.getsquare_callback(x, y)
+		board = self.parentWidget()
+		board.onSquareSelected(square)
+	
+
+class CursorItem(QtGui.QGraphicsRectItem):
+	'''Rectangle Item to be used as a cursor for selecting squares with the keyboard.'''
+
+	def __init__(self, algsquare):
+		super(CursorItem, self).__init__()
+
+		self._algsquare = algsquare
+
+		length = settings.square_size
+		self.setRect(0, 0, length, length)
+		self.setPen(QtGui.QPen(settings.cursor_color, length / 15))
+		self._selected_pen = QtGui.QPen(settings.cursor_selected_color, length / 15)
+		self._none_pen = QtGui.QPen(settings.COLOR_NONE)
 if __name__ == '__main__':
 
 	class View(QtGui.QGraphicsView):
@@ -379,17 +455,6 @@ if __name__ == '__main__':
 			super(View, self).keyPressEvent(event)
 
 
-		def resizeEvent(self, event):
-
-			# find the largest square for old and new and resize to the ratio
-
-			old_side = min(event.oldSize().width(), event.oldSize().height())
-			new_side = min(event.size().width(), event.size().height())
-			if old_side == -1 or new_side == -1:
-				return
-			factor = float(new_side) / old_side 
-			self.scale(factor, factor)
-	
 	def onMove(move):
 		print 11, move
 	def onBoardChanged(board):
@@ -409,19 +474,21 @@ if __name__ == '__main__':
 	board.setBoard(string)
 	board.newMove.connect(onMove)
 	board.boardChanged.connect(onBoardChanged)
-	board.setEditable(True)
-	#board.toggleGuides()
+	board.setEditable(False)
+	board.toggleGuides()
 	#board.toggleLabels()
-	view.directionPressed.connect(board.squares.cursor.onDirectionPressed)
-
+	#board.cursorSetEnabled(False)
+	view.directionPressed.connect(board.cursor.onDirectionPressed)
 	scene.addItem(board)
+	
+	a = board.squares.boundingRect()
+	b = board.palette.boundingRect()
+	m = view.contentsMargins()
+	width = a.width() + b.width() + board.spacing + m.left() + m.right() + 1
+	height = a.height() + m.top() + m.bottom() + 1
 
-	side = settings.board_size + 9
-	view.setGeometry(100, 100, side, side)
+	view.setGeometry(0, 0, width, height)
 	view.show()
 
-	#print board.minimumSize()
-	#print board.maximumSize()
-	#print board.preferredSize()
-
 	sys.exit(app.exec_())
+
