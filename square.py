@@ -1,41 +1,11 @@
 
 from PyQt4 import QtCore, QtGui, QtSvg
 
+from util import GraphicsWidget
 from game_engine import Piece
 
 import settings
 
-
-class GraphicsWidget(QtGui.QGraphicsWidget):
-	'''Base class for widgets to handle animation.'''
-
-	def __init__(self):
-		super(GraphicsWidget, self).__init__()
-	
-		self._anim_fade = QtCore.QPropertyAnimation(self, 'opacity')
-		self._anim_move = QtCore.QPropertyAnimation(self, 'pos')
-	
-	def move(self, new, duration, old=None):
-
-		if not old:
-			old = self.pos()
-
-		self._anim_move.setDuration(duration)
-		self._anim_move.setStartValue(old)
-		self._anim_move.setEndValue(new)
-		self._anim_move.start()
-	
-	def fadeOut(self, duration):
-		self._anim_fade.setDuration(duration)
-		self._anim_fade.setStartValue(1)
-		self._anim_fade.setEndValue(0)
-		self._anim_fade.start()
-
-	def fadeIn(self, duration):
-		self._anim_fade.setDuration(duration)
-		self._anim_fade.setStartValue(0)
-		self._anim_fade.setEndValue(1)
-		self._anim_fade.start()
 
 
 class SquareWidget(GraphicsWidget):
@@ -79,6 +49,7 @@ class SquareWidget(GraphicsWidget):
 
 	def addPiece(self, piece):
 		piece.setParentItem(self)
+		piece.setZValue(1)
 		self._piece = piece
 
 	def removePiece(self):
@@ -178,18 +149,14 @@ class GuideLabelItem(LabelItem):
 
 
 
-
-
-
-
-
-
 class SquareItem(QtGui.QGraphicsRectItem):
 	'''
 		GraphicsRectItem that represents a square of a board.
 
 		Can be selected or hovered over. Only knows if it is a light or dark square but can have a custom color.
 	'''
+
+	pen_width = 1.0
 
 	def __init__(self, islight):
 		super(SquareItem, self).__init__()
@@ -202,12 +169,13 @@ class SquareItem(QtGui.QGraphicsRectItem):
 
 		length = settings.square_size
 		self.setRect(0, 0, length, length)
-		self._setColor()
+		length += self.pen_width
 
 		self._selected_brush = QtGui.QBrush(settings.square_selected_color)
 		width = settings.square_size / 15
 		self._hover_pen = QtGui.QPen(settings.square_hover_color, width)
 		self._none_pen = QtGui.QPen(settings.COLOR_NONE)
+		self._setColor()
 
 	
 	def setCustomColor(self, color):
@@ -216,7 +184,7 @@ class SquareItem(QtGui.QGraphicsRectItem):
 	
 	def _setColor(self):
 
-		self.setPen(QtGui.QPen(settings.square_outline_color))
+		self.setPen(QtGui.QPen(settings.square_outline_color, self.pen_width))
 
 		if self._custom_color:
 			self.setBrush(QtGui.QBrush(self._custom_color))
