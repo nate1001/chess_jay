@@ -7,141 +7,10 @@ from PyQt4 import QtCore, QtGui
 
 
 from game_engine import GameMove, BoardString
-from util import ToolBar, tr
+from util import ToolBar, tr, ListItem, ListWidget, GraphicsWidget
 import settings
 
 
-
-class GraphicsList(QtGui.QGraphicsWidget):
-	'''
-	Removal of items is not supported. The list should be clear()ed and then rebuilt.
-	Selection or the methods first, last, next, previous move the current item pointer to the requested item, while slices and inding will not move the current item pointer.
-
-	'''
-	def __init__(self):
-		super(GraphicsList, self).__init__()
-		
-		self._layout = QtGui.QGraphicsGridLayout()
-		self.setLayout(self._layout)
-		self._idx = None
-		#XXX we need to hold a reference to our items or they disappear
-		self._items = []
-
-	def __iter__(self):
-		for idx in range(self._layout.count()):
-			yield self._layout.itemAt(idx)
-
-	def __len__(self):
-		return self._layout.count()
-	
-	def __nonzero__(self):
-		return self._layout.count() > 0
-
-	def __getitem__(self, key):
-		l = []
-		for item in self:
-			l.append(item)
-		return l[key]
-	
-	def clear(self):
-		for idx in range(self._layout.count()):
-			item = self[0]
-			self._layout.removeAt(0)
-			item.scene().removeItem(item)
-		self._idx = None
-		self._items = []
-	
-	def addItem(self, item, row, col):
-
-		item.itemSelected.connect(self._onItemSelected)
-		self._layout.addItem(item, row, col)
-		self._items.append(item)
-	
-	def index(self, item):
-		for idx, i in enumerate(self):
-			if item is i:
-				return idx
-		raise IndexError(item)
-
-	
-	def _onItemSelected(self, item):
-
-		if self._idx is not None:
-			selected = self[self._idx]
-			selected.setSelected(False)
-
-		for idx, _item in enumerate(self):
-			if item is _item:
-				item.setSelected(True)
-				self._idx = idx
-				return
-		raise ValueError(item)
-	
-
-	def first(self):
-		if not self:
-			return
-		self._idx = 0
-		return self[0]
-
-	def last(self):
-		if not self:
-			return
-		self._idx = len(self) -1
-		return self[-1]
-	
-	def _get(self, offset):
-		if not self or (offset < 0 and self._idx + offset < 0):
-			return
-		try:
-			self[self._idx + offset]
-			self._idx += offset
-			return self[self._idx]
-		except IndexError:
-			return
-
-	def next(self):
-		return self._get(1)
-
-	def previous(self):
-		return self._get(-1)
-	
-	def current(self):
-		return self._get(0)
-	
-
-
-class ListItem(QtGui.QGraphicsWidget):
-
-	itemSelected = QtCore.pyqtSignal(QtGui.QGraphicsWidget)
-	outline_width = .3
-
-	def __init__(self, text):
-		super(ListItem, self).__init__()
-
-		self.box = QtGui.QGraphicsRectItem()
-		self.box.setParentItem(self)
-		self.box.setPen(QtGui.QPen(settings.square_outline_color, self.outline_width))
-
-		self.text = QtGui.QGraphicsSimpleTextItem(text)
-		self.text.setParentItem(self)
-
-	def __repr__(self):
-		return str(self.text.text())
-
-	def mousePressEvent(self, event):
-		if event.button() != QtCore.Qt.LeftButton:
-			event.ignore()
-			return
-		self.itemSelected.emit(self)
-
-	def setSelected(self, selected):
-
-		if selected:
-			self.box.setBrush(QtGui.QBrush(settings.square_selected_color))
-		else:
-			self.box.setBrush(QtGui.QBrush(settings.COLOR_NONE))
-		self.text.update()
 
 
 
@@ -175,10 +44,7 @@ class MovenumItem(ListItem):
 		self.setMaximumSize(size)
 
 
-
-
-
-class MoveList(GraphicsList):
+class MoveList(ListWidget):
 	
 	moveSelected = QtCore.pyqtSignal(GameMove, int)
 
@@ -219,7 +85,7 @@ class MoveList(GraphicsList):
 		
 
 
-class MoveTable(QtGui.QGraphicsWidget):
+class MoveTable(GraphicsWidget):
 
 	moveMade = QtCore.pyqtSignal(GameMove)
 
@@ -340,7 +206,6 @@ class MoveTable(QtGui.QGraphicsWidget):
 
 
 
-
 if __name__ == '__main__':
 
 	class View(QtGui.QGraphicsView):
@@ -351,7 +216,6 @@ if __name__ == '__main__':
 	class Scene(QtGui.QGraphicsScene):
 		pass
 		
-
 	import sys
 	app = QtGui.QApplication(sys.argv)
 
