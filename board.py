@@ -21,8 +21,7 @@ class BoardItem(QtGui.QGraphicsRectItem):
 
 		self._squares = {}
 		self._font = None
-
-		self.setRect(0,0, settings.board_size, settings.board_size)
+		self.setRect(0,0, settings.boardSize(), settings.boardSize())
 
 	
 	def __getitem__(self, key):
@@ -100,14 +99,15 @@ class PaletteWidget(GraphicsWidget):
 	def __init__(self, palette):
 		super(PaletteWidget, self).__init__()
 		palette.setParentItem(self)
-		self.palette = palette
+		self.item = palette
+
 
 
 class PaletteItem(BoardItem):
 	def __init__(self):
 		super(PaletteItem, self).__init__()
 		side = settings.square_size
-		self.setRect(0,0, side * 2, side * 6)
+		self.setRect(0,0, side * 2, side * 8)
 
 	def _createSquares(self, boardstring):
 		# PalleteSquares
@@ -144,18 +144,30 @@ class BoardWidget(GraphicsWidget):
 		super(BoardWidget, self).__init__()
 
 		self.squares = BoardItem()
-		self.palette = PaletteItem()
-		self.palette_widget = PaletteWidget(self.palette)
+		palette = PaletteItem()
+		self.palette = PaletteWidget(palette)
 
 		self.squares.setParentItem(self)
 		self.palette.setParentItem(self)
 
-		self.palette.setPos(settings.board_size + self.spacing, 0)
+		self.palette.setPos(settings.boardSize()+ self.spacing, 0)
 
 		self.cursor = None
 
 		self._selected_square = None
 		self._editable = False
+
+	
+	def sizeHint(self, which, constraint):
+
+
+		if which == QtCore.Qt.PreferredSize:
+			a = self.squares.boundingRect()
+			b = self.palette.item.boundingRect()
+			return QtCore.QSizeF(a.width() + b.width() + self.spacing, max(a.height(), b.height()))
+		return QtCore.QSizeF()
+
+
 
 
 	def movePiece(self, move, uncapture=None):
@@ -324,8 +336,8 @@ class BoardWidget(GraphicsWidget):
 			if file == 'a':
 				square.addGuide(GuideLabelItem('  ' + rank))
 
-		self.palette.setBoard(None)
-		for square in self.palette:
+		self.palette.item.setBoard(None)
+		for square in self.palette.item:
 			square.squareSelected.connect(self.onSquareSelected)
 
 		if self.cursor is None:
@@ -474,19 +486,17 @@ if __name__ == '__main__':
 	board.setBoard(string)
 	board.newMove.connect(onMove)
 	board.boardChanged.connect(onBoardChanged)
-	board.setEditable(False)
+	board.setEditable(True)
 	board.toggleGuides()
 	#board.toggleLabels()
 	#board.cursorSetEnabled(False)
 	view.directionPressed.connect(board.cursor.onDirectionPressed)
 	scene.addItem(board)
 	
-	a = board.squares.boundingRect()
-	b = board.palette.boundingRect()
 	m = view.contentsMargins()
-	width = a.width() + b.width() + board.spacing + m.left() + m.right() + 1
-	height = a.height() + m.top() + m.bottom() + 1
-
+	size = board.sizeHint(QtCore.Qt.PreferredSize, None)
+	width = size.width() + m.left() + m.right() + 1
+	height = size.height() + m.top() + m.bottom() + 1
 	view.setGeometry(0, 0, width, height)
 	view.show()
 
