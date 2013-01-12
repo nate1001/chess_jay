@@ -7,7 +7,7 @@ from PyQt4 import QtCore, QtGui
 
 
 from game_engine import GameMove, BoardString
-from util import ToolBar, tr, ListItem, ListWidget, GraphicsWidget
+from util import ToolBar, tr, ListItem, ListWidget, GraphicsWidget, Action
 import settings
 
 
@@ -50,13 +50,19 @@ class MoveList(ListWidget):
 
 	def __init__(self):
 		super(MoveList, self).__init__()
-
 		self._last_selected = None
 
-	
+		actions = [
+			Action(self, "|<", settings.keys['move_first'], tr("first move"), self.first , 'go-first'),
+			Action(self, "<", settings.keys['move_previous'], tr("previous move"), self.previous , 'go-previous'),
+			Action(self, ">", settings.keys['move_next'], tr("next move"), self.next , 'go-next'),
+			Action(self, ">|", settings.keys['move_last'], tr("last move"), self.last, 'go-last'),
+		]
+		self.addActions(actions)
+
 	def clear(self):
-		self._last_selected = None
 		super(MoveList, self).clear()
+		self._last_selected = None
 	
 	def toCurrentSlice(self):
 		'''Return new move list up to but not including the current move.'''
@@ -65,6 +71,7 @@ class MoveList(ListWidget):
 		return self[:self._idx - 1]
 
 	def appendMove(self, move):
+
 		row = len(self) / 3
 
 		if len(self) % 3 == 0:
@@ -73,21 +80,50 @@ class MoveList(ListWidget):
 
 		col = 1 if move.iswhite else 2
 		item = MoveItem(move)
-
+		item.itemSelected.connect(self.onMoveItemSelected)
 		self.addItem(item, row, col)
-		item.itemSelected.connect(self._onMoveSelected)
+	
+	def onMoveItemSelected(self, item):
+		diff = self._last_selected and item.move.halfmove() - self._last_selected.halfmove()
+		self.moveSelected.emit(item.move, diff)
+	
+	def first(self):
+		if not self:
+			return None
+		move = self[1]
+		move.itemSelected.emit(move)
 
-
-	def _onMoveSelected(self, move):
-		diff = self._last_selected and (move.move.halfmove() - self._last_selected.halfmove())
-		self._last_selected = move.move
-		self.moveSelected.emit(move.move, diff)
+	def last(self):
+		moves = self[:]
+		moves[-1].itemSelected.emit(moves[-1])
+	
+	def _get(self, offset):
 		
+		current = self.current()
+		if current is None:
+			return self.first()
+		else:
+			current = current.move
 
+		for item in self:
+			if not hasattr(item, 'move'):
+				continue
+			if item.move.halfmove() == current.halfmove() + offset:
+				item.itemSelected.emit(item)
+				return item
+				
+	def next(self):
+		return self._get(1)
 
+	def previous(self):
+		return self._get(-1)
+	
+	
+		
 class MoveTable(GraphicsWidget):
 
 	moveMade = QtCore.pyqtSignal(GameMove)
+	gameLoaded = QtCore.pyqtSignal()
 
 	def __init__(self, board, game_engine):
 		
@@ -99,27 +135,21 @@ class MoveTable(GraphicsWidget):
 
 		self.move_list.moveSelected.connect(self.onMoveSelected)
 		self.board.newMove.connect(self.onNewMove)
+		self.move_list.setParentItem(self)
 
-		self.toolbar = ToolBar()
+		actions = [
+			Action(self, "New Game", settings.keys['game_new'], tr("New Game"), self.newGame, 'document-new'),
+		]
+		self.addActions(actions + self.move_list.actions())
 
-		self.toolbar.addAction("|<", 'first_move', tr("first move"), self.firstMove, 'go-first')
-		self.toolbar.addAction("<", 'previous_move', tr("previous move"), self.previousMove, 'go-previous')
-		self.toolbar.addAction(">", 'next_move', tr("next move"), self.nextMove, 'go-next')
-		self.toolbar.addAction(">|", 'last_move', tr("last move"), self.lastMove, 'go-last')
-		#self.toolbar.addAction("R", 'reload_board', tr("reload board"), self.reload, 'edit-redo')
+	def setEnabled(self, enabled):
+		if enabled:
+			self.fadeIn(settings.animation_duration)
+		else:
+			self.fadeOut(settings.animation_duration)
 
-		proxy = QtGui.QGraphicsProxyWidget()
-		proxy.setWidget(self.toolbar)
-
-		layout = QtGui.QGraphicsLinearLayout()
-		layout.setOrientation(QtCore.Qt.Vertical)
-
-		layout.addItem(proxy)
-		layout.addItem(self.move_list)
-
-		layout.setContentsMargins(0,0,0,0)
-		layout.setSpacing(0)
-		self.setLayout(layout)
+		for action in self.actions():
+			action.setVisible(enabled)
 
 	def newGame(self):
 		b = BoardString()
@@ -134,6 +164,7 @@ class MoveTable(GraphicsWidget):
 		self.move_list.clear()
 		for move in moves:
 			self.move_list.appendMove(move)
+		self.gameLoaded.emit()
 		return b
 
 	def setEngine(self, game_engine):
@@ -146,7 +177,7 @@ class MoveTable(GraphicsWidget):
 
 		# one move backward from current
 		if diff == -1:
-			next = self.move_list[self.move_list.index(move) + 1]
+			next = self.move_list.next()
 			self._move_piece(next.reverse(), next.getTarget())
 
 		# one move forward from current or first move from inital
@@ -205,7 +236,6 @@ class MoveTable(GraphicsWidget):
 		self.move_list.previous()
 
 
-
 if __name__ == '__main__':
 
 	class View(QtGui.QGraphicsView):
@@ -215,24 +245,40 @@ if __name__ == '__main__':
 
 	class Scene(QtGui.QGraphicsScene):
 		pass
+	
+	def onMoveSelected(move, diff):
+		pass
+		#print 11, move, diff
 		
 	import sys
 	app = QtGui.QApplication(sys.argv)
 
+	from util import SceneView
+	from board import BoardWidget
+	from game_engine import DumbGameEngine
 	import db
-	ml = MoveList()
+
+	board = BoardWidget()
+	game_engine = DumbGameEngine()
+	table = MoveTable(board, game_engine)
+	table.move_list.moveSelected.connect(onMoveSelected)
 	moves = db.Moves.select(1)[:]
-	for move in moves:
-		ml.appendMove(move)
-
+	table.loadGame(moves)
+	
 	scene = Scene()
-	scene.addItem(ml)
+	scene.addItem(table)
+	size = table.move_list.preferredSize()
 
-	view = View(scene)
-	view.setGeometry(100, 0, 820, 600)
+	
+	rect = QtCore.QRectF(0, 0, 100, 200)
+	view = SceneView(scene, rect)
+
+	view.setGeometry(0, 0, 100, 200)
+	view.setGeometry(200, 0, size.width() + 40, 600)
 	view.show()
 
 	sys.exit(app.exec_())
 	
+
 
 

@@ -15,16 +15,18 @@ dbchesslib = os.getcwd() + lib
 COLOR_NONE = QtGui.QColor(0,0,0,0)
 
 square_size = 60
-board_size = square_size * 8
-
-
+def boardSize():
+	return square_size * 8
+	
 
 keys = {
-	'first_move': QtGui.QKeySequence.MoveToStartOfLine,
-	'previous_move': QtGui.QKeySequence.MoveToPreviousChar,
-	'next_move': QtGui.QKeySequence.MoveToNextChar,
-	'last_move': QtGui.QKeySequence.MoveToEndOfLine,
-	'reload_board': QtGui.QKeySequence('r'),
+	'mode_play': QtGui.QKeySequence('1'),
+	'mode_edit': QtGui.QKeySequence('2'),
+
+	'move_first': QtGui.QKeySequence.MoveToStartOfLine,
+	'move_previous': QtGui.QKeySequence.MoveToPreviousChar,
+	'move_next': QtGui.QKeySequence.MoveToNextChar,
+	'move_last': QtGui.QKeySequence.MoveToEndOfLine,
 
 	'cursor_north': QtGui.QKeySequence('k'),
 	'cursor_south': QtGui.QKeySequence('j'),
@@ -36,7 +38,15 @@ keys = {
 	'cursor_southeast': QtGui.QKeySequence('n'),
 	'cursor_select': QtCore.Qt.Key_Return,
 
+	'board_new': QtGui.QKeySequence('Alt+n'),
+	'board_clear': QtGui.QKeySequence('Alt+k'),
+	'board_guides': QtGui.QKeySequence(''),
+	'board_labels': QtGui.QKeySequence(''),
+
+	'game_new': QtGui.QKeySequence('Alt+n'),
+
 }
+
 
 piece_directory = os.getcwd() + media_piece
 chess_font = 'Internet'
@@ -53,5 +63,3 @@ guide_color = QtGui.QColor('red')
 show_labels = False
 show_guides = False
 animation_duration = 300
-
-

@@ -1,3 +1,14 @@
+'''
+Copyright Nate Carson 2012
+'''
+
+from PyQt4 import QtCore, QtGui
+
+from board import BoardWidget
+from move_list import MoveTable
+from util import tr, ToolBar, ScalingView, AspectLayout, SceneView, Action
+import settings
+
 
 class ChessScene(QtGui.QGraphicsScene):
 
@@ -13,7 +24,7 @@ class ChessScene(QtGui.QGraphicsScene):
 		self.move_table = MoveTable(self.board, game_engine)
 		self.board.boardChanged.connect(self.move_table.resetEngine)
 
-		x, y = settings.board_size + 5, 0
+		x, y = settings.boardSize() + 5, 0
 		self.addItem(self.move_table)
 		self.move_table.setPos(x, y)
 
@@ -25,25 +36,11 @@ class ChessScene(QtGui.QGraphicsScene):
 		self.setEngine(game_engine)
 		self.newGame()
 
-	def onShowPallete(self):
-		self.move_table.hide()
-		self.board.setEditable(True)
-
-	def onShowMoves(self):
-		self.move_table.show()
-		self.board.setEditable(False)
-
 	def moveCursor(self, direction):
 		self.board.moveCursor(direction)
 
 	def cursorSelect(self):
 		self.board.cursorSelect()
-
-	def toggleLabels(self):
-		self.board.toggleLabels()
-
-	def toggleGuides(self):
-		self.board.toggleGuides()
 
 	def loadGame(self, moves):
 		board = self.move_table.loadGame(moves)
@@ -66,64 +63,6 @@ class ChessScene(QtGui.QGraphicsScene):
 		self.onNewMove(from_square, to_square, subject, target)
 
 
-class BoardView(QtGui.QWidget):
-
-	def __init__(self, scene, w, h):
-
-		super(BoardView, self).__init__()
-		self.view = QtGui.QGraphicsView(scene)
-		self.view.setSceneRect(0, 0, w, h)
-
-		self.toolbar = ToolBar()
-
-		self.toolbar.addAction("New", 'first_move', tr("new game"), self.newGame, 'document-new')
-
-		layout = QtGui.QVBoxLayout()
-		layout.addWidget(self.toolbar)
-		layout.addWidget(self.view)
-		self.setLayout(layout)
-		layout.setContentsMargins(0,0,0,0)
-		layout.setSpacing(0)
-	
-	def newGame(self):
-		pass
-
-
-class SideBarView(QtGui.QWidget):
-	def __init__(self, scene, w, h):
-		super(SideBarView, self).__init__()
-
-		self.view = QtGui.QGraphicsView(scene)
-		self.view.setSceneRect(w, 0, 200, h)
-		self.setGeometry(0, 0, 200, h)
-
-		self.toolbar = ToolBar()
-
-		group = QtGui.QActionGroup(self.toolbar)
-		group.setExclusive(True)
-
-		a = self.toolbar.addAction("Play", 'first_move', tr("play game"), self.onShowMoves, 'media-playback-start') 
-		a.setCheckable(True)
-		a.setChecked(True)
-		group.addAction(a)
-
-		a = self.toolbar.addAction("Set", 'first_move', tr("set board"), self.onShowPallete, 'document-edit')
-		a.setCheckable(True)
-		group.addAction(a)
-
-		layout = QtGui.QVBoxLayout()
-		layout.addWidget(self.toolbar)
-		layout.addWidget(self.view)
-		layout.setContentsMargins(0,0,0,0)
-		layout.setSpacing(0)
-		self.setLayout(layout)
-
-	
-	def onShowMoves(self):
-		pass
-	def onShowPallete(self):
-		pass
-
 
 class ChessWidget(QtGui.QWidget):
 
@@ -132,64 +71,81 @@ class ChessWidget(QtGui.QWidget):
 	def __init__(self):
 		super(ChessWidget, self).__init__()
 
-		#self.direction_pressed.connect(
-		#	scene.board.cursor.onDirectionPressed)
-
+		#scene
 		game_engine = DumbGameEngine()
 		self.scene = ChessScene(game_engine)
 
-		w = settings.board_size
-		h = settings.board_size 
+		#side_bar
+		#FIXME bad rect / geometry
+		side = settings.boardSize()
+		side = self.scene.board.squares.rect().width()
+		x = side + self.scene.board.spacing - 2
+		w = self.scene.board.palette.item.rect().width()
+		h = self.scene.board.palette.item.rect().height()
+		rect = QtCore.QRectF(x, -80, w +70, h)
 
-		board = BoardView(self.scene, w, h)
-		sidebar = SideBarView(self.scene, w, h)
+		sidebar = SceneView(self.scene, rect)
+		sidebar.view.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+
+		#actions
+		actions = [
+			Action(self, "Play", settings.keys['mode_play'], tr("play game"), self.onShowMoves, 'media-playback-start'),
+			Action(self, "Edit", settings.keys['mode_edit'], tr("set board position"), self.onShowPallete, 'document-edit')
+		]
+		self.addActions(actions)
+		group = QtGui.QActionGroup(sidebar.toolbar)
+		group.setExclusive(True)
+		for action in actions:
+			action.setCheckable(True)
+			group.addAction(action)
+		actions[0].activate(QtGui.QAction.Trigger)
+		sidebar.toolbar.addActions(self.actions())
+
+		#board
+		side = settings.boardSize()
+		rect = QtCore.QRectF(0, 0, side, side)
+		board = SceneView(self.scene, rect)
+
+		board.toolbar.addActions(self.scene.move_table.actions())
+		board.toolbar.addActions(self.scene.board.actions())
+
+		b = self.scene.board
+		actions = [
+			Action(self, "Guides", settings.keys['board_guides'], tr("toggle guides"), b.toggleGuides, ''),
+			Action(self, "Labels", settings.keys['board_labels'], tr("toggle square labels"), b.toggleLabels, ''),
+		]
+		#board.toolbar.addActions(actions)
 		
+		#layout
 		layout = QtGui.QHBoxLayout()
 		layout.addWidget(board)
 		layout.addWidget(sidebar)
-		self.setLayout(layout)
-		#fixed
-		layout.setSizeConstraint(3)
 		layout.setContentsMargins(0,0,0,0)
+		layout.setAlignment(sidebar, QtCore.Qt.AlignRight)
+		self.setLayout(layout)
 
-		self.setGeometry(0, 0, w*2, h)
+	def onShowMoves(self):
+		self.scene.board.setEditable(False)
+		self.scene.move_table.setEnabled(True)
+
+	def onShowPallete(self):
+		self.scene.board.setEditable(True)
+		self.scene.move_table.setEnabled(False)
+
+	def toggleLabels(self):
+		self.scene.board.toggleLabels()
+
+	def toggleGuides(self):
+		self.scene.board.toggleGuides()
 
 	def loadGame(self, moves):
 		self.scene.loadGame(moves)
 
 	def keyPressEvent(self, event):
-
+		
 		if event.key() == QtCore.Qt.Key_Escape:
 			self.close()
-
-		if event.key() == settings.keys['cursor_south']:
-			self.direction_pressed.emit('south')
-		elif event.key() == settings.keys['cursor_north']:
-			self.direction_pressed.emit('north')
-		elif event.key() == settings.keys['cursor_west']:
-			self.direction_pressed.emit('west')
-		elif event.key() == settings.keys['cursor_east']:
-			self.direction_pressed.emit('east')
-
-		if event.key()  == settings.keys['cursor_northwest']:
-			self.direction_pressed.emit('northwest')
-		elif event.key() == settings.keys['cursor_northeast']:
-			self.direction_pressed.emit('northeast')
-		elif event.key() == settings.keys['cursor_southwest']:
-			self.direction_pressed.emit('southwest')
-		elif event.key() == settings.keys['cursor_southeast']:
-			self.direction_pressed.emit('southeast')
-
-		elif event.key() == settings.keys['cursor_select']:
-			self.direction_pressed.emit('select')
-
 		super(ChessWidget, self).keyPressEvent(event)
-
-	def toggleLabels(self):
-		self.scene().toggleLabels()
-
-	def toggleGuides(self):
-		self.scene().toggleGuides()
 
 
 
@@ -201,11 +157,13 @@ if __name__ == '__main__':
 
 	app = QtGui.QApplication(sys.argv)
 
-
 	widget = ChessWidget()
 	icon = QtGui.QIcon('media/chess.ico')
 	widget.setWindowIcon(icon)
 	widget.setWindowTitle('ChessJay')
+
+	size = widget.sizeHint()
+	widget.setGeometry(100, 50, size.width(), size.height() + 16)
 	widget.show()
 
 
