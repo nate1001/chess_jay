@@ -101,6 +101,13 @@ class PaletteWidget(GraphicsWidget):
 		super(PaletteWidget, self).__init__()
 		palette.setParentItem(self)
 		self.item = palette
+	
+	def size(self):
+		rect = self.item.boundingRect()
+		return QtCore.QSizeF(rect.width(), rect.height())
+	
+	def preferredSize(self):
+		return self.size()
 
 
 class PaletteItem(BoardItem):
@@ -122,8 +129,6 @@ class PaletteItem(BoardItem):
 	def _itemSetPos(self, item, x, y):
 		super(PaletteItem, self)._itemSetPos(item, x - 8, y)
 	
-	def __str__(self):
-		return '<PaletteItem>'
 
 
 class BoardWidget(GraphicsWidget):
@@ -143,28 +148,29 @@ class BoardWidget(GraphicsWidget):
 	def __init__(self):
 		super(BoardWidget, self).__init__()
 
-		actions = [
-			Action(self, "New", settings.keys['board_new'], tr("reset to starting"), self.onNewBoard, 'document-new'),
-			Action(self, "Clear", settings.keys['board_clear'], tr("remove pieces"), self.onClearPieces, 'document-close'),
-		]
-		self.addActions(actions)
-
-		self.squares = BoardItem()
-		palette = PaletteItem()
-		self.palette = PaletteWidget(palette)
-
-		self.squares.setParentItem(self)
-		self.palette.setParentItem(self)
-
-		self.palette.setPos(settings.boardSize()+ self.spacing, 0)
 
 		self.cursor = None
+		self.squares = BoardItem()
+		self.palette = PaletteWidget(PaletteItem())
+		self.fen = FenTextWidget()
 
 		self._selected_square = None
 		self._editable = False
 
+		self.boardChanged.connect(self.fen.setFen)
+		self.squares.setParentItem(self)
+		self.palette.setParentItem(self)
+		self.palette.setPos(settings.boardSize()+ self.spacing, 0)
 
-
+		actions = [
+			Action(self, "New", settings.keys['board_new'], tr("reset to starting"), self.onNewBoard, 'document-new'),
+			Action(self, "Clear", settings.keys['board_clear'], tr("remove pieces"), self.onClearPieces, 'edit-clear'),
+		]
+		self.addActions(actions)
+		new, clear = [a.graphics_button for a in self.actions()]
+		new.setParentItem(self.palette)
+		clear.setParentItem(self.palette)
+		clear.setPos(new.size().width(), 0)
 	
 	def onClearPieces(self):
 		empty = BoardString.EMPTY_SQUARE * 64
@@ -174,15 +180,15 @@ class BoardWidget(GraphicsWidget):
 		new = BoardString()
 		self.squares.setBoard(new)
 
+	def size(self):
+		a = self.squares.boundingRect()
+		b = self.palette.item.boundingRect()
+		return QtCore.QSizeF(a.width() + b.width() + self.spacing, max(a.height(), b.height()))
 	
 	def sizeHint(self, which, constraint):
 		if which == QtCore.Qt.PreferredSize:
-			a = self.squares.boundingRect()
-			b = self.palette.item.boundingRect()
-			return QtCore.QSizeF(a.width() + b.width() + self.spacing, max(a.height(), b.height()))
+			return self.size()
 		return QtCore.QSizeF()
-
-
 
 	def movePiece(self, move, uncapture=None):
 		'''
@@ -319,7 +325,9 @@ class BoardWidget(GraphicsWidget):
 	def setEditable(self, editable):
 		if editable:
 			self.palette.fadeIn(settings.animation_duration)
+			self.fen.fadeIn(settings.animation_duration)
 		else:
+			self.fen.fadeOut(settings.animation_duration)
 			self.palette.fadeOut(settings.animation_duration)
 
 		self._editable = editable
@@ -375,6 +383,22 @@ class BoardWidget(GraphicsWidget):
 		self.cursor._enabled = enable
 	
 
+class FenTextWidget(GraphicsWidget):
+	def __init__(self):
+		super(FenTextWidget, self).__init__()
+		self.item = FenTextItem()
+		self.item.setParentItem(self)
+
+	def setFen(self, fen):
+		self.item.setPlainText(fen)
+
+class FenTextItem(QtGui.QGraphicsTextItem):
+	
+	def __init__(self):
+		super(FenTextItem, self).__init__()
+		self.setTextInteractionFlags(QtCore.Qt.TextEditorInteraction | QtCore.Qt.TextSelectableByKeyboard )
+		self.setFlags(QtGui.QGraphicsItem.ItemIsSelectable | QtGui.QGraphicsItem.ItemIsFocusable | QtGui.QGraphicsItem.ItemIsMovable);
+	
 
 
 class CursorWidget(GraphicsWidget):
@@ -494,7 +518,6 @@ if __name__ == '__main__':
 	board.toggleGuides()
 	#board.toggleLabels()
 	#board.cursorSetEnabled(False)
-	view.directionPressed.connect(board.cursor.onDirectionPressed)
 	scene.addItem(board)
 	
 	m = view.contentsMargins()

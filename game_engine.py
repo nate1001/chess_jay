@@ -99,7 +99,7 @@ class AlgSquare(object):
 		self.y = cls.ranks.index(label[1]) + 1
 		self.label = label
 	
-	def isPallete(self):
+	def isPalette(self):
 		return False
 	
 	def __str__(self):
@@ -114,13 +114,13 @@ class AlgSquare(object):
 
 
 
-class PalleteSquare(AlgSquare):
+class PaletteSquare(AlgSquare):
 #XXX this really belongs with board.py but its nice
 #	 to have it next to the orignal definition.
 
 	files = AlgSquare.files + 'ij'
 
-	def isPallete(self):
+	def isPalette(self):
 		return True
 
 	@classmethod
@@ -166,7 +166,11 @@ class GameMove(Move):
 		return game_move
 	
 	def __str__(self):
-		return '%s %s %s' %(self.move, self.movenum, self.iswhite)
+		if self.iswhite:
+			num = '%s. ' % self.movenum
+		else:
+			num = '... %s. ' % self.movenum
+		return num + self.san
 	
 	def __eq__(self, other):
 		# XXX equality checks that is the same half move, not the same square
@@ -199,7 +203,6 @@ class GameMove(Move):
 			return None
 		return piece
 	
-
 
 
 class IllegalMove(Exception): pass
@@ -242,7 +245,7 @@ class AbstractGameEngine(object):
 		if boardstring is None:
 			self.boardstring = BoardString(self.initial.string)
 		else:
-			self.boardstring = BoardString(boardstring.string)
+			self.boardstring = BoardString(str(boardstring))
 	
 	def makeMove(self, move, movenum, iswhite):
 
@@ -290,9 +293,6 @@ class DBGameEngine(AbstractGameEngine):
 
 	def __init__(self):
 		super(DumbGameEngine, self).__init__()
-
-
-
 
 
 

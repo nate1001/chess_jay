@@ -47,7 +47,6 @@ keys = {
 
 }
 
-
 piece_directory = os.getcwd() + media_piece
 chess_font = 'Internet'
 square_light_color = QtGui.QColor('white')

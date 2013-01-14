@@ -253,7 +253,7 @@ if __name__ == '__main__':
 	import sys
 	app = QtGui.QApplication(sys.argv)
 
-	from util import SceneView
+	from util import ScalingView
 	from board import BoardWidget
 	from game_engine import DumbGameEngine
 	import db
@@ -268,13 +268,18 @@ if __name__ == '__main__':
 	scene = Scene()
 	scene.addItem(table)
 	size = table.move_list.preferredSize()
+	print 11, size
 
 	
-	rect = QtCore.QRectF(0, 0, 100, 200)
-	view = SceneView(scene, rect)
+	rect = QtCore.QRectF(0, 0, size.width(), size.height())
+	view = ScalingView(scene, rect)
+	view.setGeometry(200, 0, size.width(), 600)
 
-	view.setGeometry(0, 0, 100, 200)
-	view.setGeometry(200, 0, size.width() + 40, 600)
+	print 33, view.sizeHint()
+	print 44, view.minimumSize()
+	print 44, view.maximumSize()
+
+	view.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
 	view.show()
 
 	sys.exit(app.exec_())

@@ -2,13 +2,16 @@
 Copyright Nate Carson 2012
 '''
 
-from PyQt4 import QtCore, QtGui
+from PyQt4 import QtCore, QtGui, QtSvg
 
 import settings
 
 # XXX stub
 def tr(text):
 	return text
+
+
+
 
 
 
@@ -32,19 +35,38 @@ class ToolBar(QtGui.QToolBar):
 		self.setMovable(False)
 
 
-	#FIXME remove settings dependency
-	def addAction(self, label, settings_key, tip, callback, icon_name=None):
+class DropShadow(QtGui.QGraphicsDropShadowEffect):
+	
+	def __init__(self):
+		super(DropShadow, self).__init__()
+		self.setColor(QtGui.QColor(210,210,210))
+		self.setBlurRadius(2)
 
-		action = QtGui.QAction(label, self)
-		action.setShortcut(settings.keys[settings_key])
-		action.setToolTip(tip)
-		action.triggered.connect(callback)
+class Colorize(QtGui.QGraphicsColorizeEffect):
+	def __init__(self):
+		super(Colorize, self).__init__()
+
+
+class Action(QtGui.QAction):
+
+	def __init__(self, parent, label, keycode, tip, callback, icon_name=None):
+		super(Action, self).__init__(label, parent)
+
+		self.setShortcut(keycode)
+		self.setToolTip(tip)
+		self.triggered.connect(callback)
 		if icon_name:
 			icon = Icon.fromName(icon_name)
-			action.setIcon(icon)
-		super(ToolBar, self).addAction(action)
-		return action
+			self.setIcon(icon)
 
+		if icon_name:
+			self.graphics_button = GraphicsButton(icon_name)
+			self.graphics_button.pushed.connect(callback)
+			self.triggered.connect(self.graphics_button.onTriggered)
+		else:
+			self.graphics_button = None
+	
+	
 
 class GraphicsWidget(QtGui.QGraphicsWidget):
 	'''Base class for widgets to handle animation.'''
@@ -54,6 +76,11 @@ class GraphicsWidget(QtGui.QGraphicsWidget):
 	
 		self._anim_fade = QtCore.QPropertyAnimation(self, 'opacity')
 		self._anim_move = QtCore.QPropertyAnimation(self, 'pos')
+		self._anim_scale = QtCore.QPropertyAnimation(self, 'scale')
+
+		self._anim_big  = QtCore.QPropertyAnimation(self, 'scale')
+		self._anim_small = QtCore.QPropertyAnimation(self, 'scale')
+		self._anim_bigsmall = QtCore.QSequentialAnimationGroup()
 	
 	def move(self, new, duration, old=None):
 
@@ -66,16 +93,55 @@ class GraphicsWidget(QtGui.QGraphicsWidget):
 		self._anim_move.start()
 	
 	def fadeOut(self, duration):
+
 		self._anim_fade.setDuration(duration)
-		self._anim_fade.setStartValue(1)
+		self._anim_fade.setStartValue(self.opacity())
 		self._anim_fade.setEndValue(0)
 		self._anim_fade.start()
 
 	def fadeIn(self, duration):
 		self._anim_fade.setDuration(duration)
-		self._anim_fade.setStartValue(0)
+		self._anim_fade.setStartValue(self.opacity())
 		self._anim_fade.setEndValue(1)
 		self._anim_fade.start()
+	
+	def animScale(self, scale, duration):
+		
+		# move the origin in relation with scale
+		delta = self.scale() - scale
+		size = self.size() - self.size() * delta
+		w, h = self.size().width() - size.width(), self.size().height() - size.height()
+		pos = self.pos()
+		pos = QtCore.QPointF(pos.x() + w,  pos.y() + h)
+		self.move(pos, duration)
+		
+		self._anim_scale.setDuration(duration)
+		self._anim_scale.setStartValue(self.scale())
+		self._anim_scale.setEndValue(scale)
+		self._anim_scale.start()
+
+	def _animBigSmall(self, scale, duration, anim):
+
+		# move the origin in relation with scale
+		delta = self.scale() - scale
+		size = self.size() - self.size() * delta
+		w, h = self.size().width() - size.width(), self.size().height() - size.height()
+		pos = self.pos()
+		pos = QtCore.QPointF(pos.x() + w,  pos.y() + h)
+		self.move(pos, duration)
+		
+		anim.setDuration(duration)
+		anim.setStartValue(self.scale())
+		anim.setEndValue(scale)
+
+	def animBigSmall(self, scale, duration):
+		old = self.scale()
+		self._animBigSmall(scale, duration, self._anim_big)
+		self._anim_bigsmall.addAnimation(self._anim_big)
+		self._animBigSmall(old, duration, self._anim_small)
+		self._anim_bigsmall.addAnimation(self._anim_small)
+		self._anim_bigsmall.start()
+
 
 
 class ListWidget(QtGui.QGraphicsWidget):
@@ -176,37 +242,70 @@ class ListWidget(QtGui.QGraphicsWidget):
 		return self._get(0)
 	
 
-class ListItem(QtGui.QGraphicsWidget):
+class TextWidget(GraphicsWidget):
 
 	itemSelected = QtCore.pyqtSignal(QtGui.QGraphicsWidget)
 	outline_width = .3
+	padding = 2
 
 	def __init__(self, text):
-		super(ListItem, self).__init__()
+		super(TextWidget, self).__init__()
+
+		self.setGraphicsEffect(DropShadow())
+		self.setAcceptHoverEvents(True)
+		self._selected = False
 
 		self.box = QtGui.QGraphicsRectItem()
-		self.box.setParentItem(self)
 		self.box.setPen(QtGui.QPen(settings.square_outline_color, self.outline_width))
+		self.box.setParentItem(self)
 
 		self.text = QtGui.QGraphicsSimpleTextItem(text)
 		self.text.setParentItem(self)
 
+		size = self.preferredSize()
+		p = self.padding
+		self.box.setRect(-p, -p, size.width()+p, size.height()+p)
+
 	def __repr__(self):
 		return str(self.text.text())
+	
+	def preferredSize(self):
+		rect = self.text.boundingRect()
+		return QtCore.QSize(rect.width(), rect.height())
 
 	def mousePressEvent(self, event):
 		if event.button() != QtCore.Qt.LeftButton:
 			event.ignore()
 			return
 		self.itemSelected.emit(self)
-
+	
 	def setSelected(self, selected):
 
 		if selected:
+			self._selected = True
 			self.box.setBrush(QtGui.QBrush(settings.square_selected_color))
 		else:
+			self._selected = False
 			self.box.setBrush(QtGui.QBrush(settings.COLOR_NONE))
 		self.text.update()
+	
+	def setEnabled(self, enabled):
+		super(TextWidget, self).setEnabled(enabled)		
+		
+		self.setSelected(enabled)
+		if not enabled:
+			self.box.setPen(QtGui.QPen(settings.COLOR_NONE, 0))
+		else:
+			self.box.setPen(QtGui.QPen(settings.square_outline_color, self.outline_width))
+		self.update()
+
+	def hoverEnterEvent(self, event):
+		self.box.setBrush(QtGui.QBrush(settings.square_hover_color))
+	
+	def hoverLeaveEvent(self, event):
+		self.setSelected(self._selected)
+
+
 
 
 	
@@ -215,31 +314,189 @@ class ScalingView(QtGui.QGraphicsView):
 		super(ScalingView, self).__init__(scene)
 		self._rect = rect
 		self.setSceneRect(rect)
+		self._last_new = None
 
-		self._size_hint = None
 
 	def resizeEvent(self, event):
+		old, new = event.oldSize(), event.size()
+		# if we are recursing
+		if self._last_new == old:
+			return
+
 		# find the largest square for old and new and resize to the ratio
-		old_side = min(event.oldSize().width(), event.oldSize().height())
-		new_side = min(event.size().width(), event.size().height())
+		old_side = min(old.width(), old.height())
+		new_side = min(new.width(), new.height())
+
+		# if we are a invalid size
 		if old_side <= 0 or new_side <= 0:
 			return
 
-		print old_side, new_side
 		factor = float(new_side) / old_side 
 		side = max(new_side, old_side)
-		print side
-		self._size_hint = QtCore.QSize(side, side)
 		self.scale(factor, factor)
-	
-	def minimumSizeHint(self):
-		print 11, self._size_hint
-		return self._size_hint
+		self._last_new = new
 	
 
+class FocusingView(QtGui.QGraphicsView):
 
-class ScalingWidget(QtGui.QWidget):
-	def __init__(self):
-		super(ScalingWidget, self).__init__()
+	def __init__(self, scene, item, rect):
+		super(FocusingView, self).__init__(scene)
+
+		self._item = item
+		self._rect = rect
+
+		self.setSceneRect(rect)
+		self.toolbar = ToolBar()
+		self.fitInView(self._item, QtCore.Qt.KeepAspectRatio)
+
+
 	def resizeEvent(self, event):
-		pass
+		self.fitInView(self._rect, QtCore.Qt.KeepAspectRatio)
+
+
+
+class AspectLayout(QtGui.QLayout):
+
+	def __init__(self):
+		super(AspectLayout, self).__init__()
+
+		self._item = None
+		self._count = 0
+		# keeps reseting margins
+		#self.setContentsMargins(0,0,0,0)
+
+		self._width_by_height = None
+
+	
+	def addItem(self, item):
+		if self._item is not None:
+			raise ValueError
+		self._item = item
+		self._count = 1
+
+
+		size = item.widget().sizeHint()
+		w, h = size.width(), size.height()
+
+		if w <= 0 or h <= 0:
+			raise ValueError
+		self._width_by_height = w / float(h)
+
+	def count(self):
+		return self._count
+
+	def itemAt(self, index):
+		if index == 0 and self._count == 1:
+			return self._item
+		else:
+			return None
+
+	def takeAt(self, index):
+		if self.itemAt(index):
+			self._item = None
+			return self._item
+		return None
+
+	def sizeHint(self):
+		return self._item and self._item.widget().sizeHint()
+
+	#def expandingDirections(self):
+	#def minimumSize(self):
+
+	
+	def setGeometry(self, rect):
+
+		margins = self._item.widget().contentsMargins()
+		l, r, t, b = margins.left(), margins.right(), margins.top(), margins.bottom()
+
+		x, y = rect.x() + l, rect.y() + t
+		w, h = rect.width(), rect.height()
+		ratio = self._width_by_height
+
+		nw1, nh1 = h * ratio, h
+		nw2, nh2 = w, w / ratio 
+
+
+		if not (nw1 > w or nh1 > h):
+			rect = QtCore.QRect(l, t, nw1 + l + r, nh1 + t + b + 1)
+		else:
+			rect = QtCore.QRect(l, t, nw2 + l + r, nh2 + t + b + 1)
+
+		self._item.setGeometry(rect)
+
+
+
+class SvgIcon(QtSvg.QGraphicsSvgItem):
+	
+	scalefactor = .8
+
+	#FIXME
+	direc = './media/icons/scalable/'
+	def __init__(self, name):
+		path = SvgIcon.direc + name + '.svg'
+		super(SvgIcon, self).__init__(path)
+		self.setScale(self.scalefactor)
+
+	
+	def size(self):
+		rect = self.boundingRect()
+		w, h  = rect.width(), rect.height()
+		scale = self.scale()
+		return QtCore.QSizeF(w * scale, h * scale)
+
+
+class GraphicsButton(GraphicsWidget):
+
+	pushed = QtCore.pyqtSignal(GraphicsWidget)
+	outline_width = .5
+
+	def __init__(self, name):
+		super(GraphicsButton, self).__init__()
+		
+
+		self.box = QtGui.QGraphicsRectItem()
+		self.box.setPen(QtGui.QPen(settings.COLOR_NONE, self.outline_width))
+		self.box.setParentItem(self)
+
+		self.icon = SvgIcon(name)
+		self.icon.setParentItem(self)
+
+		self.setGraphicsEffect(DropShadow())
+
+		size = self.icon.size()
+		rect = QtCore.QRectF(0,0,size.width(),size.height())
+		self.box.setRect(rect)
+
+		self.setAcceptHoverEvents(True)
+
+	def onTriggered(self):
+		self.mousePressEvent(None)
+
+	def mousePressEvent(self, event):
+
+		# if this is not a dummy event
+		if event is not None:
+			if event.button() != QtCore.Qt.LeftButton:
+				event.ignore()
+				return
+			self.pushed.emit(self)
+
+		self.animBigSmall(.8, settings.animation_duration / 2)
+
+	def hoverEnterEvent(self, event):
+		self.animScale(1.15, settings.animation_duration / 2)
+	
+	def hoverLeaveEvent(self, event):
+		self.animScale(1, settings.animation_duration / 2)
+	
+	def size(self):
+		rect = self.icon.boundingRect()
+		w, h  = rect.width(), rect.height()
+		scale = self.scale()
+		size = QtCore.QSizeF(w * scale - w * .25, h * scale - h *.25)
+		return size
+	
+	def sizeHint(self, which, constraint=None):
+		return self.size()
+			
+

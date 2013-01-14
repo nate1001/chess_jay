@@ -320,7 +320,6 @@ class MoveTable(TableWidget):
 		self.move_list.setCurrent(move)
 		self.moveMade.emit(move)
 		
-	
 
 
 	

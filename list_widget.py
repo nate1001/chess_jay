@@ -74,7 +74,6 @@ class MoveList(DBList):
 	def doActivate(self, move):
 		
 		self.callback(move)
-
 		forces = db.Force.select(move.fen)
 		self.attacksum_callback(forces)
 
