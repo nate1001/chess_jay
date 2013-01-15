@@ -11,10 +11,6 @@ def tr(text):
 	return text
 
 
-
-
-
-
 class Icon(object):
 	
 	@classmethod
@@ -67,6 +63,53 @@ class Action(QtGui.QAction):
 			self.graphics_button = None
 	
 	
+class RaiseAnimation(QtCore.QParallelAnimationGroup):
+
+	def __init__(self, widget, scale, duration):
+		super(RaiseAnimation, self).__init__()
+
+		self._anim_scale = QtCore.QPropertyAnimation(widget, 'scale')
+		self._anim_pos = QtCore.QPropertyAnimation(widget, 'pos')
+	
+		# move the origin in relation with scale
+		delta = widget.scale() - scale
+		size = widget.size() - widget.size() * delta
+		w, h = widget.size().width() - size.width(), widget.size().height() - size.height()
+		pos = widget.pos()
+		new = QtCore.QPointF(pos.x() + w,  pos.y() + h)
+
+		self._anim_pos.setDuration(duration)
+		self._anim_pos.setStartValue(widget.pos())
+		self._anim_pos.setEndValue(new)
+		
+		self._anim_scale.setDuration(duration)
+		self._anim_scale.setStartValue(widget.scale())
+		self._anim_scale.setEndValue(scale)
+
+		self.addAnimation(self._anim_scale)
+		self.addAnimation(self._anim_pos)
+
+	def goForward(self):
+		self.setDirection(QtCore.QAbstractAnimation.Forward)
+		self.start()
+
+	def goBackward(self):
+		self.setDirection(QtCore.QAbstractAnimation.Backward)
+		self.start()
+
+
+class PressAnimation(QtCore.QSequentialAnimationGroup):
+
+	def __init__(self, widget, scale, duration):
+		super(PressAnimation, self).__init__()
+
+		orig = widget.scale()
+		self._anim_in = RaiseAnimation(widget, scale, duration)
+		self._anim_out = RaiseAnimation(widget, orig, duration)
+
+		self.addAnimation(self._anim_in)
+		self.addAnimation(self._anim_out)
+
 
 class GraphicsWidget(QtGui.QGraphicsWidget):
 	'''Base class for widgets to handle animation.'''
@@ -78,9 +121,6 @@ class GraphicsWidget(QtGui.QGraphicsWidget):
 		self._anim_move = QtCore.QPropertyAnimation(self, 'pos')
 		self._anim_scale = QtCore.QPropertyAnimation(self, 'scale')
 
-		self._anim_big  = QtCore.QPropertyAnimation(self, 'scale')
-		self._anim_small = QtCore.QPropertyAnimation(self, 'scale')
-		self._anim_bigsmall = QtCore.QSequentialAnimationGroup()
 	
 	def move(self, new, duration, old=None):
 
@@ -105,43 +145,6 @@ class GraphicsWidget(QtGui.QGraphicsWidget):
 		self._anim_fade.setEndValue(1)
 		self._anim_fade.start()
 	
-	def animScale(self, scale, duration):
-		
-		# move the origin in relation with scale
-		delta = self.scale() - scale
-		size = self.size() - self.size() * delta
-		w, h = self.size().width() - size.width(), self.size().height() - size.height()
-		pos = self.pos()
-		pos = QtCore.QPointF(pos.x() + w,  pos.y() + h)
-		self.move(pos, duration)
-		
-		self._anim_scale.setDuration(duration)
-		self._anim_scale.setStartValue(self.scale())
-		self._anim_scale.setEndValue(scale)
-		self._anim_scale.start()
-
-	def _animBigSmall(self, scale, duration, anim):
-
-		# move the origin in relation with scale
-		delta = self.scale() - scale
-		size = self.size() - self.size() * delta
-		w, h = self.size().width() - size.width(), self.size().height() - size.height()
-		pos = self.pos()
-		pos = QtCore.QPointF(pos.x() + w,  pos.y() + h)
-		self.move(pos, duration)
-		
-		anim.setDuration(duration)
-		anim.setStartValue(self.scale())
-		anim.setEndValue(scale)
-
-	def animBigSmall(self, scale, duration):
-		old = self.scale()
-		self._animBigSmall(scale, duration, self._anim_big)
-		self._anim_bigsmall.addAnimation(self._anim_big)
-		self._animBigSmall(old, duration, self._anim_small)
-		self._anim_bigsmall.addAnimation(self._anim_small)
-		self._anim_bigsmall.start()
-
 
 
 class ListWidget(QtGui.QGraphicsWidget):
@@ -449,10 +452,15 @@ class GraphicsButton(GraphicsWidget):
 
 	pushed = QtCore.pyqtSignal(GraphicsWidget)
 	outline_width = .5
+	hover_scale = 1.10
+	press_scale = .95
 
 	def __init__(self, name):
 		super(GraphicsButton, self).__init__()
-		
+
+		# set these up when we are sure we know thier position
+		self._anim_hover = None
+		self._anim_press = None
 
 		self.box = QtGui.QGraphicsRectItem()
 		self.box.setPen(QtGui.QPen(settings.COLOR_NONE, self.outline_width))
@@ -468,6 +476,7 @@ class GraphicsButton(GraphicsWidget):
 		self.box.setRect(rect)
 
 		self.setAcceptHoverEvents(True)
+	
 
 	def onTriggered(self):
 		self.mousePressEvent(None)
@@ -481,13 +490,22 @@ class GraphicsButton(GraphicsWidget):
 				return
 			self.pushed.emit(self)
 
-		self.animBigSmall(.8, settings.animation_duration / 2)
+		# set up animation now that we know our position
+		if self._anim_press is None:
+			self._anim_press = PressAnimation(self, self.press_scale, settings.animation_duration/2)
+
+		self._anim_press.start()
+		
 
 	def hoverEnterEvent(self, event):
-		self.animScale(1.15, settings.animation_duration / 2)
+		# set up animation now that we know our position
+		if self._anim_hover is None:
+			self._anim_hover = RaiseAnimation(self, self.hover_scale, settings.animation_duration/2)
+
+		self._anim_hover.goForward()
 	
 	def hoverLeaveEvent(self, event):
-		self.animScale(1, settings.animation_duration / 2)
+		self._anim_hover.goBackward()
 	
 	def size(self):
 		rect = self.icon.boundingRect()
