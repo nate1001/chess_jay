@@ -9,7 +9,6 @@ from moves_widget import MovesWidget
 from util import tr, ToolBar, ScalingView, FocusingView, Action
 import settings
 
-
 class ChessScene(QtGui.QGraphicsScene):
 
 	def __init__(self, game_engine):
@@ -101,7 +100,7 @@ class ChessWidget(QtGui.QWidget):
 		super(ChessWidget, self).__init__()
 
 		#scene
-		game_engine = DumbGameEngine()
+		game_engine = NewGameEngine()
 		self.scene = ChessScene(game_engine)
 
 		#side_bar
@@ -180,7 +179,7 @@ if __name__ == '__main__':
 				self.close()
 
 	import sys
-	from game_engine import DumbGameEngine
+	from game_engine import ChessLibGameEngine
 
 	app = QtGui.QApplication(sys.argv)
 
@@ -189,20 +188,22 @@ if __name__ == '__main__':
 	#widget.setWindowIcon(icon)
 	#widget.setWindowTitle('ChessJay')
 
-	game_engine = DumbGameEngine()
+	game_engine = ChessLibGameEngine()
 	scene = ChessScene(game_engine)
 
-	rect = QtCore.QRectF(0, 0, 600, 550)
+	rect = QtCore.QRectF(0, 0, 650, 550)
 
-	view = ScalingView(scene, rect)
-	view.setGeometry(100, 50, 600, 550)
+	#view = ScalingView(scene, rect)
+	view = View(scene)
+	view.setGeometry(100, 50, 650, 550)
 	view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
 	view.show()
 
 	import db
 	moves = []
-	for row in db.Moves.select(1):
-		moves.append(row)
-	scene.loadGame(moves)
+	#for row in db.Moves.select(1):
+	#	moves.append(row)
+	#scene.loadGame(moves)
+	scene.newGame()
 
 	sys.exit(app.exec_())

@@ -199,8 +199,8 @@ class BoardWidget(GraphicsWidget):
 			uncapture will add back pieces for moving back in a game.
 		'''
 		
-		fromsquare = self.squares[move.ssquare.label]
-		tosquare = self.squares[move.esquare.label]
+		fromsquare = self.squares[move.source.name]
+		tosquare = self.squares[move.target.name]
 
 		# if its a capture
 		if tosquare.getPiece():
@@ -289,7 +289,7 @@ class BoardWidget(GraphicsWidget):
 
 				# else it is a standard move
 				else:
-					move = Move(str(ssquare) + str(esquare))
+					move = Move.from_uci(str(ssquare) + str(esquare))
 					# if we are editing then just move the piece
 					if self._editable:
 						self.movePiece(move)

@@ -6,386 +6,420 @@ import settings
 
 class MoveItem(TextWidget):
 
-	def __init__(self, move):
-		super(MoveItem, self).__init__(move.san)
+    def __init__(self, move):
+        super(MoveItem, self).__init__(str(move))
 
-		self.gamemove = move
+        self.gamemove = move
 
-		#size = QtCore.QSizeF(self.width, self.height)
-		#self.setMaximumSize(size)
+        #size = QtCore.QSizeF(self.width, self.height)
+        #self.setMaximumSize(size)
 
-		#self.box.setRect(
-		#	-self.padding,
-		#	-self.padding,
-		#	self.width + self.padding,
-		#	self.height + self.padding)
+        #self.box.setRect(
+        #   -self.padding,
+        #   -self.padding,
+        #   self.width + self.padding,
+        #   self.height + self.padding)
 
 
 class MovenumItem(TextWidget):
 
 
-	def __init__(self, movenum):
-		super(MovenumItem, self).__init__(' ' + str(movenum) + '.')
-		self.movenum = movenum
+    def __init__(self, movenum):
+        super(MovenumItem, self).__init__(' ' + str(movenum) + '.')
+        self.movenum = movenum
 
-		#size = QtCore.QSizeF(self.width, self.height)
-		#self.setMaximumSize(size)
+        #size = QtCore.QSizeF(self.width, self.height)
+        #self.setMaximumSize(size)
 
 
 class PagingList(GraphicsWidget):
 
-	padding = 7
-	height = 30
-	
-	def __init__(self, width):
-		super(PagingList, self).__init__()
+    padding = 7
+    height = 30
+    
+    def __init__(self, width):
+        super(PagingList, self).__init__()
 
-		self._items = []
-		self._x = 0
-		self._selected = None
-		self._width = width
+        self._items = []
+        self._x = 0
+        self._selected = None
+        self._width = width
 
-		#self.box = QtGui.QGraphicsRectItem()
-		#self.box.setPen(QtGui.QPen(settings.square_outline_color, 1))
-		#self.box.setParentItem(self)
-		#self.box.setRect(0,0, width, 50)
+        #self.box = QtGui.QGraphicsRectItem()
+        #self.box.setPen(QtGui.QPen(settings.square_outline_color, 1))
+        #self.box.setParentItem(self)
+        #self.box.setRect(0,0, width, 50)
 
-	
-	def __iter__(self):
-		for item in self._items:
-			yield item
+    
+    def __iter__(self):
+        for item in self._items:
+            yield item
 
-	def append(self, item):
+    def append(self, item):
 
-		self._items.append(item)
-		item.setParentItem(self)
-		item.setPos(self._x + self.padding, self.padding)
-		item.itemSelected.connect(self.onItemSelected)
-		self._x += item.preferredSize().width() + self.padding
-	
-	def pop(self):
-		item = self._items.pop()
-		item.itemSelected.disconnect(self.onItemSelected)
-		self.scene().removeItem(item)
-		self._x -= item.preferredSize().width()
-		return item
-	
-	def clear(self):
-		try:
-			while True:
-				self.pop()
-		except IndexError:
-			pass
-		
-	def onItemSelected(self, item):
-		if self._selected:
-			self._selected.setSelected(False)
-		self._selected = item
-		item.setSelected(True)
-	
-		# center of viewable area
-		center = self._width / 2
-		# center of the item to be centered
-		center -= (item.preferredSize().width() + self.padding) / 2
-		# offset of the item to the center
-		xo = center - item.x()
+        self._items.append(item)
+        item.setParentItem(self)
+        item.setPos(self._x + self.padding, self.padding)
+        item.itemSelected.connect(self.onItemSelected)
+        self._x += item.preferredSize().width() + self.padding
+    
+    def pop(self):
+        item = self._items.pop()
+        item.itemSelected.disconnect(self.onItemSelected)
+        item.setParentItem(None)
+        if self.scene():
+            self.scene().removeItem(item)
+        self._x -= item.preferredSize().width()
+        return item
+    
+    def clear(self):
+        try:
+            while True:
+                self.pop()
+        except IndexError:
+            pass
+        
+    def onItemSelected(self, item):
+        if self._selected:
+            self._selected.setSelected(False)
+        self._selected = item
+        item.setSelected(True)
+    
+        # center of viewable area
+        center = self._width / 2
+        # center of the item to be centered
+        center -= (item.preferredSize().width() + self.padding) / 2
+        # offset of the item to the center
+        xo = center - item.x()
 
-		selected = item
-		for item in self:
-			pos = QtCore.QPointF(item.pos().x() + xo, self.padding)
-			item.move(pos, settings.animation_duration)
-			x, w = item.x(), item.text.boundingRect().width()
-			# if we are outside the viewable area
-			if x + xo < 0 or x + xo + w > self._width:
-				item.fadeOut(settings.animation_duration)
-			else:
-				item.fadeIn(settings.animation_duration)
+        selected = item
+        for item in self:
+            pos = QtCore.QPointF(item.pos().x() + xo, self.padding)
+            item.move(pos, settings.animation_duration)
+            x, w = item.x(), item.text.boundingRect().width()
+            # if we are outside the viewable area
+            if x + xo < 0 or x + xo + w > self._width:
+                item.fadeOut(settings.animation_duration)
+            else:
+                item.fadeIn(settings.animation_duration)
 
-	def _get_offset(self, offset):
-		
-		current = self._selected
-		if current is None:
-			return self.first()
+    def _get_offset(self, offset, emit):
+        
+        current = self._selected
+        if current is None:
+            return self.first()
 
+        # throw out items that are not enabled
+        enabled = [i for i in self._items if i.isEnabled()]
+        idx = enabled.index(current)
 
-		# throw out items that are not enabled
-		enabled = [i for i in self._items if i.isEnabled()]
-		idx = enabled.index(current)
+        if idx + offset >= len(enabled) or idx + offset < 0:
+            return None
+        if emit:
+            enabled[idx + offset].itemSelected.emit(enabled[idx + offset])
+        return enabled[idx + offset]
 
-		if idx + offset >= len(enabled) or idx + offset < 0:
-			return None
-		enabled[idx + offset].itemSelected.emit(enabled[idx + offset])
-		return enabled[idx + offset]
+    def current(self, emit=True):
+        return self._get_offset(0, emit)
 
-	def next(self):
-		return self._get_offset(1)
+    def next(self, emit=True):
+        return self._get_offset(1, emit)
 
-	def previous(self):
-		return self._get_offset(-1)
-	
-	def _get_idx(self, idx):
-		enabled = [i for i in self._items if i.isEnabled()]
-		if not enabled:
-			return None
-		enabled[idx].itemSelected.emit(enabled[idx])
-		return enabled[idx]
+    def previous(self, emit=True):
+        return self._get_offset(-1, emit)
+   
+    def _get_idx(self, idx):
+        enabled = [i for i in self._items if i.isEnabled()]
+        if not enabled:
+            return None
+        enabled[idx].itemSelected.emit(enabled[idx])
+        return enabled[idx]
 
-	def first(self):
-		return self._get_idx(0)
+    def first(self):
+        return self._get_idx(0)
 
-	def last(self):
-		return self._get_idx(-1)
-	
-	def sizeHint(self, which, constraint=None):
-		size = QtCore.QSizeF(self._width, self.height)
-		if which == QtCore.Qt.PreferredSize:
-			return size
-		return size
+    def last(self):
+        return self._get_idx(-1)
+    
+    def sizeHint(self, which, constraint=None):
+        size = QtCore.QSizeF(self._width, self.height)
+        if which == QtCore.Qt.PreferredSize:
+            return size
+        return size
 
 
 class MovePagingList(PagingList):
 
-	moveSelected = QtCore.pyqtSignal(GameMove, int)
+    moveSelected = QtCore.pyqtSignal(GameMove, int)
 
-	def __init__(self, width):
-		super(MovePagingList, self).__init__(width)
+    def __init__(self, width):
+        super(MovePagingList, self).__init__(width)
 
-		self._last_selected = None
+        self._last_selected = None
+        self._setNextMove(0, True)
 
-		actions = [
-			Action(self, "|<", settings.keys['move_first'], tr("first move"), self.first , 'go-first'),
-			Action(self, "<", settings.keys['move_previous'], tr("previous move"), self.previous , 'go-previous'),
-			Action(self, ">", settings.keys['move_next'], tr("next move"), self.next , 'go-next'),
-			Action(self, ">|", settings.keys['move_last'], tr("last move"), self.last, 'go-last'),
-		]
-		self.addActions(actions)
 
-	def toCurrentSlice(self):
-		'''Return new move list up to but not including the current move.'''
-		if not self._selected:
-			return []
-		l, selected  = [], self._selected
-		for item in self:
-			if item is selected:
-				break
-			l.append(item)
-		return l
+    def toCurrentSlice(self):
+        '''Return new move list up to but not including the current move.'''
+        if not self._selected:
+            return []
+        l, selected  = [], self._selected
+        for item in self:
+            if item is selected:
+                break
+            l.append(item)
+        return l
 
-	def append(self, move):
+    def append(self, move):
 
-		if move.iswhite:
-			item = MovenumItem(move.movenum)
-			super(MovePagingList, self).append(item)
-			item.setEnabled(False)
+        dummy = super(MovePagingList, self).pop()
+        item = MoveItem(move)
+        item.itemSelected.connect(self.onMoveItemSelected)
+        super(MovePagingList, self).append(item)
 
-		item = MoveItem(move)
-		item.itemSelected.connect(self.onMoveItemSelected)
-		super(MovePagingList, self).append(item)
+        self._setNextMove(move.movenum, move.iswhite)
 
-	def clear(self):
-		super(MovePagingList, self).clear()
-		self._last_selected = None
+    def _setNextMove(self, movenum, iswhite):
 
-	def onMoveItemSelected(self, item):
-		last = self._last_selected
-		diff = last and item.gamemove.halfmove() - last.gamemove.halfmove()
-		self._last_selected = item
+        if not iswhite:
+            item = MovenumItem(movenum + 1)
+            super(MovePagingList, self).append(item)
+            item.setEnabled(False)
 
-		self.moveSelected.emit(item.gamemove, diff)
+        item = MoveItem('???')
+        item.setEnabled(False)
+        super(MovePagingList, self).append(item)
+
+    def clear(self):
+        super(MovePagingList, self).clear()
+        self._last_selected = None
+
+    def onMoveItemSelected(self, item):
+        last = self._last_selected
+        diff = last and item.gamemove.halfmove - last.gamemove.halfmove
+        self._last_selected = item
+
+        self.moveSelected.emit(item.gamemove, diff)
 
 
 class MovesWidget(GraphicsWidget):
 
-	moveMade = QtCore.pyqtSignal(GameMove)
-	gameLoaded = QtCore.pyqtSignal()
+    moveMade = QtCore.pyqtSignal(GameMove)
+    gameLoaded = QtCore.pyqtSignal()
 
-	def __init__(self, board, game_engine):
-		
-		super(MovesWidget, self).__init__()
-		
+    def __init__(self, board, game_engine):
+        
+        super(MovesWidget, self).__init__()
+        
 
-		self.game_engine = game_engine
-		self.board = board
-		self.move_list = MovePagingList(312)
+        self.game_engine = game_engine
+        self.board = board
+        self.move_list = MovePagingList(312)
 
-		self.move_list.moveSelected.connect(self.onMoveSelected)
-		self.board.newMove.connect(self.onNewMove)
+        self.move_list.moveSelected.connect(self.onMoveSelected)
+        self.board.newMove.connect(self.onNewMove)
 
-		actions = [
-			Action(self, "New Game", settings.keys['game_new'], tr("New Game"), self.newGame, 'document-new'),
-		]
+        #actions = [
+        #    Action(self, "New Game", settings.keys['game_new'], tr("New Game"), self.newGame, 'document-new'),
+        #]
 
-		first = GraphicsButton('go-first')
-		first.pushed.connect(self.move_list.first)
-		next = GraphicsButton('go-next')
-		next.pushed.connect(self.move_list.next)
-		previous = GraphicsButton('go-previous')
-		previous.pushed.connect(self.move_list.previous)
-		last = GraphicsButton('go-last')
-		last.pushed.connect(self.move_list.last)
+        #TODO: investigate / add bug report for this behavior.
+        #XXX
+        # Move these out of MovePaginList because they add unwanted arguments in a nasty black magic way.
+        # I thnk triggered action calls the callback something like:
+        #
+        # def onTriggered(self, calling_widget)
+        #   try:
+        #       self.callback(calling_widget)
+        #   except:
+        #       self.callback()
+        # 
+        # so if you have default keyword args they are happily overwritten with the calling widget.
+        actions = [
+            Action(self, "|<", settings.keys['move_first'], tr("first move"), self.first , 'go-first'),
+            Action(self, "<", settings.keys['move_previous'], tr("previous move"), self.previous , 'go-previous'),
+            Action(self, ">", settings.keys['move_next'], tr("next move"), self.next , 'go-next'),
+            Action(self, ">|", settings.keys['move_last'], tr("last move"), self.last, 'go-last'),
+        ]
+        self.addActions(actions)
 
-		first, prev = [a.graphics_button for a in self.move_list.actions()[:2]]
-		next, last = [a.graphics_button for a in self.move_list.actions()[2:]]
+        first = GraphicsButton('go-first')
+        first.pushed.connect(self.first)
+        next = GraphicsButton('go-next')
+        next.pushed.connect(self.next)
+        previous = GraphicsButton('go-previous')
+        previous.pushed.connect(self.previous)
+        last = GraphicsButton('go-last')
+        last.pushed.connect(self.last)
 
-		layout = QtGui.QGraphicsLinearLayout()
-		layout.addItem(first)
-		layout.addItem(previous)
-		layout.addItem(self.move_list)
-		layout.addItem(next)
-		layout.addItem(last)
+        first, prev = [a.graphics_button for a in self.actions()[:2]]
+        next, last = [a.graphics_button for a in self.actions()[2:]]
 
-		self.setLayout(layout)
+        layout = QtGui.QGraphicsLinearLayout()
+        layout.addItem(first)
+        layout.addItem(previous)
+        layout.addItem(self.move_list)
+        layout.addItem(next)
+        layout.addItem(last)
 
-		size = self.layout().preferredSize()
-		self.box = QtGui.QGraphicsRectItem()
-		self.box.setPen(QtGui.QPen(settings.square_outline_color, .5))
-		self.box.setParentItem(self)
-		self.box.setRect(0,0, size.width(), size.height())
+        self.setLayout(layout)
 
-		# FIXME make list expand to space left over from buttons
-		size = first.sizeHint(QtCore.Qt.PreferredSize)
-		w = size.width() + 4 * 33
+        size = self.layout().preferredSize()
+        self.box = QtGui.QGraphicsRectItem()
+        self.box.setPen(QtGui.QPen(settings.square_outline_color, .5))
+        self.box.setParentItem(self)
+        self.box.setRect(0,0, size.width(), size.height())
 
+        # FIXME make list expand to space left over from buttons
+        size = first.sizeHint(QtCore.Qt.PreferredSize)
+        w = size.width() + 4 * 33
 
-	
-	def setEnabled(self, enabled):
-		if enabled:
-			self.fadeIn(settings.animation_duration)
-		else:
-			self.fadeOut(settings.animation_duration)
+    def setEnabled(self, enabled):
+        if enabled:
+            self.fadeIn(settings.animation_duration)
+        else:
+            self.fadeOut(settings.animation_duration)
 
-		for action in self.actions():
-			action.setVisible(enabled)
+        for action in self.actions():
+            action.setVisible(enabled)
 
-	def newGame(self):
-		b = BoardString()
-		self.game_engine.newGame(b)
-		self.move_list.clear()
-		self.board.setBoard(b)
-		return b
-	
-	def loadGame(self, moves):
+    def newGame(self):
+        b = BoardString()
+        self.game_engine.newGame(b)
+        self.move_list.clear()
+        self.board.setBoard(b)
+        return b
+    
+    def loadGame(self, moves):
 
-		b = self.newGame()
-		self.move_list.clear()
-		for move in moves:
-			self.move_list.append(move)
-		self.gameLoaded.emit()
-		return b
+        b = self.newGame()
+        self.move_list.clear()
+        for move in moves:
+            self.move_list.append(move)
+        self.gameLoaded.emit()
+        return b
 
-	def setEngine(self, game_engine):
-		self.game_engine = game_engine
-	
-	def resetEngine(self, boardstring):
-		self.game_engine.reset(boardstring)
-	
-	def onMoveSelected(self, move, diff):
+    def setEngine(self, game_engine):
+        self.game_engine = game_engine
+    
+    def resetEngine(self, boardstring):
+        self.game_engine.reset(boardstring)
+    
+    def onMoveSelected(self, move, diff):
 
-		# one move backward from current
-		if diff == -1:
-			next = self.move_list.next().gamemove
-			self._move_piece(next.reverse(), next.getTarget())
+        # one move backward from current
+        if diff == -1:
+            current = self.move_list.current(emit=False)
+            self._move_piece(current.gamemove.reverse(), current.gamemove.captured)
 
-		# one move forward from current or first move from inital
-		elif diff == 1:
-			self._move_piece(move)
+        # one move forward from current or first move from inital
+        elif diff == 1:
+            self._move_piece(move)
 
-		# everything else
-		else:
-			self.board.setBoard(move.board_after)
+        # everything else
+        else:
+            self.board.setBoard(move.board_after)
 
-		self.game_engine.reset(move.board_after)
-		self.moveMade.emit(move)
+        self.moveMade.emit(move)
 
-	def _move_piece(self, move, uncapture=''):
-		#We need this to check for castling moves so we can move the rook.
-		self.board.movePiece(move, uncapture)
-		rook = self.game_engine.castleRookMove(move)
-		if rook:
-			self.board.movePiece(rook, uncapture)
+    def _move_piece(self, move, uncapture=''):
+        #We need this to check for castling moves so we can move the rook.
 
+        self.board.movePiece(move, uncapture)
+        rook = self.game_engine.castleRookMove(move)
+        if rook:
+            self.board.movePiece(rook, uncapture)
 
-	def onNewMove(self, move):
+    def onNewMove(self, move):
 
-		if not self.game_engine.validateMove(move):
-			print 'did not validate'
-			#TODO we could beep here
-			return
-		else:
-			pass
+        if not self.game_engine.validateMove(move):
+            print 'did not validate'
+            #TODO we could beep here
+            return
+        else:
+            pass
+        # let the engine make the move
+        game_move = self.game_engine.makeMove(move)
+        self.move_list.append(game_move)
+        self.next()
 
-		# let the engine make the move
-		#FIXME
-		movenum, iswhite = self.move_list.getNewMoveNum()
-		game_move = self.game_engine.makeMove(move, movenum, iswhite)
+    def current(self):
+        return self.move_list.current()
+    
+    def first(self):
+        return self.move_list.first()
 
-		# add the move into the list:
-		# if this is the first move of the game
-		if not self.move_list:
-			self.move_list.appendMove(game_move)
-	
-	def first(self):
-		return self.move_list.first()
+    def next(self):
+        return self.move_list.next()
 
-	def next(self):
-		return self.move_list.next()
+    def previous(self):
+        return self.move_list.previous()
 
-	def previous(self):
-		return self.move_list.previous()
-
-	def last(self):
-		return self.move_list.last()
+    def last(self):
+        return self.move_list.last()
 
 
 
 
 if __name__ == '__main__':
 
-	class View(QtGui.QGraphicsView):
-		def keyPressEvent(self, event):
-			if event.key() == QtCore.Qt.Key_Escape:
-				self.close()
+    class View(QtGui.QGraphicsView):
+        
+        def __init__(self, scene):
+            super(View, self).__init__(scene)
 
-	class Scene(QtGui.QGraphicsScene):
-		pass
-	
-	def onMoveSelected(move, diff):
-		pass
-		#print 11, move, diff
-		
-	import sys
-	app = QtGui.QApplication(sys.argv)
+        def keyPressEvent(self, event):
 
-	from util import ScalingView
-	from board import BoardWidget
-	from game_engine import DumbGameEngine
-	import db
+            if event.key() == QtCore.Qt.Key_Escape:
+                self.close()
 
-	board = BoardWidget()
-	game_engine = DumbGameEngine()
-	table = MovesWidget(board, game_engine)
-	table.move_list.moveSelected.connect(onMoveSelected)
-	moves = db.Moves.select(1)[:]
-	table.loadGame(moves)
-	table.setPos(50, 50)
-	
-	scene = Scene()
-	scene.addItem(table)
-	size = table.move_list.preferredSize()
+            if event.key() == QtCore.Qt.Key_Return:
+                engine = self.scene().moves.game_engine
+                move = engine.position.get_legal_moves().next()
+                self.scene().moves.onNewMove(move)
 
-	
-	rect = QtCore.QRectF(0, 0, 300, 100)
-	#view = ScalingView(scene, rect)
-	view = View(scene)
-	view.setGeometry(200, 0, 700, 120)
 
-	view.show()
-	table.move_list.first()
-	view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
-	view.centerOn(0, 150)
+    class Scene(QtGui.QGraphicsScene):
+        pass
+        
+    import sys
+    app = QtGui.QApplication(sys.argv)
 
-	sys.exit(app.exec_())
-	
+    from util import ScalingView
+    from board import BoardWidget
+    from game_engine import ChessLibGameEngine, Move
+    import db
 
-		
-	
+    board = BoardWidget()
+    game_engine = ChessLibGameEngine()
+    game_engine.newGame('kaka')
+    table = MovesWidget(board, game_engine)
+    table.setPos(50, 50)
+
+    moves = 'e4 e5 Nf3 Bd6 Nc3 Nf6 d3 O-O Bg5 Bb4 Be2 Bxc3+ bxc3 d6 O-O Bg4 d4 Bxf3 Bxf3 exd4 ' \
+     'cxd4 Nc6 c3 Qd7 Bxf6 gxf6 Bg4 f5 Bxf5 Qe7 Qh5 Rfe8 Qxh7+ Kf8 Qh8#'
+    #for san in moves.split()[:4]:
+        #move = game_engine.sanToMove(san)
+        #table.onNewMove(move)
+    
+    scene = Scene()
+    scene.addItem(table)
+    scene.moves = table
+    size = table.move_list.preferredSize()
+
+    
+    rect = QtCore.QRectF(0, 0, 300, 100)
+    #view = ScalingView(scene, rect)
+    view = View(scene)
+    view.setGeometry(200, 0, 700, 120)
+
+    view.show()
+    table.move_list.first()
+    view.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+    view.centerOn(0, 150)
+
+    sys.exit(app.exec_())
+    
+
+        
+    
