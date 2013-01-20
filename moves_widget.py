@@ -20,6 +20,17 @@ class MoveItem(TextWidget):
         #   self.width + self.padding,
         #   self.height + self.padding)
 
+    def __repr__(self):
+        return "MoveItem(%s)" % repr(str(self))
+
+    def setWhite(self):
+        self.box.setBrush(QtGui.QColor('white'))
+        self.box.setPen(QtGui.QPen(QtGui.QColor('black'), 1))
+
+    def setBlack(self):
+        self.box.setBrush(QtGui.QColor('black'))
+        self.box.setPen(QtGui.QPen(QtGui.QColor('white'), 1))
+
 
 class MovenumItem(TextWidget):
 
@@ -31,6 +42,9 @@ class MovenumItem(TextWidget):
         #size = QtCore.QSizeF(self.width, self.height)
         #self.setMaximumSize(size)
 
+    def __repr__(self):
+        return "MoveNumItem(%s)" % repr(str(self))
+
 
 class PagingList(GraphicsWidget):
 
@@ -41,7 +55,6 @@ class PagingList(GraphicsWidget):
         super(PagingList, self).__init__()
 
         self._items = []
-        self._x = 0
         self._selected = None
         self._width = width
 
@@ -57,11 +70,16 @@ class PagingList(GraphicsWidget):
 
     def append(self, item):
 
-        self._items.append(item)
         item.setParentItem(self)
-        item.setPos(self._x + self.padding, self.padding)
         item.itemSelected.connect(self.onItemSelected)
-        self._x += item.preferredSize().width() + self.padding
+
+        last = self._items[-1] if self._items else None
+        if last:
+            x = last.pos().x() + last.preferredSize().width() + self.padding
+        else:
+            x = 0
+        item.setPos(x, self.padding)
+        self._items.append(item)
     
     def pop(self):
         item = self._items.pop()
@@ -69,7 +87,6 @@ class PagingList(GraphicsWidget):
         item.setParentItem(None)
         if self.scene():
             self.scene().removeItem(item)
-        self._x -= item.preferredSize().width()
         return item
     
     def clear(self):
@@ -152,11 +169,11 @@ class MovePagingList(PagingList):
 
     moveSelected = QtCore.pyqtSignal(GameMove, int)
 
-    def __init__(self, width):
+    def __init__(self, board, width):
         super(MovePagingList, self).__init__(width)
 
         self._last_selected = None
-        self._setNextMove(0, True)
+        self.newGame(board, True)
 
 
     def toCurrentSlice(self):
@@ -177,21 +194,39 @@ class MovePagingList(PagingList):
         item.itemSelected.connect(self.onMoveItemSelected)
         super(MovePagingList, self).append(item)
 
-        self._setNextMove(move.movenum, move.iswhite)
+        self._setDummyMove(move.movenum, move.iswhite)
 
-    def _setNextMove(self, movenum, iswhite):
+    def _setDummyMove(self, movenum, iswhite):
 
         if not iswhite:
             item = MovenumItem(movenum + 1)
             super(MovePagingList, self).append(item)
             item.setEnabled(False)
 
-        item = MoveItem('???')
+        item = MoveItem('   ')
         item.setEnabled(False)
+        if iswhite:
+            item.setBlack()
+        else:
+            item.setWhite()
         super(MovePagingList, self).append(item)
 
-    def clear(self):
-        super(MovePagingList, self).clear()
+    def newGame(self, boardstring, iswhite):
+
+        start = GameMove(
+            'Start',
+            0,
+            False,
+            None,
+            boardstring,
+            None,
+            None,
+            None,
+            None
+        )
+        self.clear()
+        self._setDummyMove(0, False)
+        self.append(start)
         self._last_selected = None
 
     def onMoveItemSelected(self, item):
@@ -211,10 +246,11 @@ class MovesWidget(GraphicsWidget):
         
         super(MovesWidget, self).__init__()
         
-
         self.game_engine = game_engine
         self.board = board
-        self.move_list = MovePagingList(312)
+
+        bstring = game_engine.position.fen.to_boardstring()
+        self.move_list = MovePagingList(bstring, 312)
 
         self.move_list.moveSelected.connect(self.onMoveSelected)
         self.board.newMove.connect(self.onNewMove)
@@ -286,14 +322,14 @@ class MovesWidget(GraphicsWidget):
     def newGame(self):
         b = BoardString()
         self.game_engine.newGame(b)
-        self.move_list.clear()
+        self.move_list.newGame(b, True)
         self.board.setBoard(b)
         return b
     
     def loadGame(self, moves):
 
         b = self.newGame()
-        self.move_list.clear()
+        self.move_list.newGame()
         for move in moves:
             self.move_list.append(move)
         self.gameLoaded.emit()
@@ -406,7 +442,6 @@ if __name__ == '__main__':
     scene.addItem(table)
     scene.moves = table
     size = table.move_list.preferredSize()
-
     
     rect = QtCore.QRectF(0, 0, 300, 100)
     #view = ScalingView(scene, rect)

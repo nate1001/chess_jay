@@ -228,6 +228,7 @@ class DBGameEngine(AbstractGameEngine):
 
 class GameMove(object):
     
+    
     def __init__(self, san, movenum, iswhite, before, after, source, target, captured, piece):
         
         self.san = san
@@ -239,6 +240,8 @@ class GameMove(object):
         self.target = target
         self.captured = captured
         self.piece = piece
+
+        self.is_start_pos = False
 
     @property
     def halfmove(self):
