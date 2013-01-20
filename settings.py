@@ -44,6 +44,8 @@ keys = {
 	'board_labels': QtGui.QKeySequence(''),
 
 	'game_new': QtGui.QKeySequence('Alt+n'),
+	'game_draw': QtGui.QKeySequence('Alt+d'),
+	'game_resign': QtGui.QKeySequence('Alt+r'),
 
 }
 

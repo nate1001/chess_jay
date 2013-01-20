@@ -91,6 +91,11 @@ if __name__ == '__main__':
 	view = ChessView(scene)
 	mainWindow = MainWindow(game_engine, scene, view)
 
+    #widget = ChessWidget()
+    #icon = QtGui.QIcon('media/chess.ico')
+    #widget.setWindowIcon(icon)
+    #widget.setWindowTitle('ChessJay')
+
 	s = settings.board_size
 	l = settings.square_size
 	#mainWindow.setGeometry(100, 0, 1200, 600)

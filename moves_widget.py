@@ -175,6 +175,31 @@ class MovePagingList(PagingList):
         self._last_selected = None
         self.newGame(board, True)
 
+        #TODO: investigate / add bug report for this behavior.
+        #XXX
+        # Move these out of MovePaginList because they add unwanted arguments in a nasty black magic way.
+        # I thnk triggered action calls the callback something like:
+        #
+        # def onTriggered(self, calling_widget)
+        #   try:
+        #       self.callback(calling_widget)
+        #   except:
+        #       self.callback()
+        # 
+        # so if you have default keyword args they are happily overwritten with the calling widget.
+        actions = [
+            Action(self, "|<", settings.keys['move_first'], tr("first move"), self._onFirst , 'go-first'),
+            Action(self, "<", settings.keys['move_previous'], tr("previous move"), self._onPrevious , 'go-previous'),
+            Action(self, ">", settings.keys['move_next'], tr("next move"), self._onNext , 'go-next'),
+            Action(self, ">|", settings.keys['move_last'], tr("last move"), self._onLast, 'go-last'),
+        ]
+        self.addActions(actions)
+
+    def _onFirst(self): self.first()
+    def _onPrevious(self): self.previous()
+    def _onNext(self): self.next()
+    def _onLast(self): self.last()
+
 
     def toCurrentSlice(self):
         '''Return new move list up to but not including the current move.'''
@@ -255,42 +280,14 @@ class MovesWidget(GraphicsWidget):
         self.move_list.moveSelected.connect(self.onMoveSelected)
         self.board.newMove.connect(self.onNewMove)
 
-        #actions = [
-        #    Action(self, "New Game", settings.keys['game_new'], tr("New Game"), self.newGame, 'document-new'),
-        #]
-
-        #TODO: investigate / add bug report for this behavior.
-        #XXX
-        # Move these out of MovePaginList because they add unwanted arguments in a nasty black magic way.
-        # I thnk triggered action calls the callback something like:
-        #
-        # def onTriggered(self, calling_widget)
-        #   try:
-        #       self.callback(calling_widget)
-        #   except:
-        #       self.callback()
-        # 
-        # so if you have default keyword args they are happily overwritten with the calling widget.
         actions = [
-            Action(self, "|<", settings.keys['move_first'], tr("first move"), self.first , 'go-first'),
-            Action(self, "<", settings.keys['move_previous'], tr("previous move"), self.previous , 'go-previous'),
-            Action(self, ">", settings.keys['move_next'], tr("next move"), self.next , 'go-next'),
-            Action(self, ">|", settings.keys['move_last'], tr("last move"), self.last, 'go-last'),
+            Action(self, "New Game", settings.keys['game_new'], tr("New Game"), self.newGame, 'document-new'),
+            Action(self, "Draw", settings.keys['game_draw'], tr("Offer Draw"), self.offerDraw, 'face-plain'),
+            Action(self, "Resign", settings.keys['game_resign'], tr("Resign Game"), self.resignGame, 'face-sad'),
         ]
         self.addActions(actions)
 
-        first = GraphicsButton('go-first')
-        first.pushed.connect(self.first)
-        next = GraphicsButton('go-next')
-        next.pushed.connect(self.next)
-        previous = GraphicsButton('go-previous')
-        previous.pushed.connect(self.previous)
-        last = GraphicsButton('go-last')
-        last.pushed.connect(self.last)
-
-        first, prev = [a.graphics_button for a in self.actions()[:2]]
-        next, last = [a.graphics_button for a in self.actions()[2:]]
-
+        first, previous, next, last = [a.graphics_button for a in self.move_list.actions()]
         layout = QtGui.QGraphicsLinearLayout()
         layout.addItem(first)
         layout.addItem(previous)
@@ -394,6 +391,11 @@ class MovesWidget(GraphicsWidget):
     def last(self):
         return self.move_list.last()
 
+    def offerDraw(self):
+        pass
+
+    def resignGame(self):
+        pass
 
 
 
