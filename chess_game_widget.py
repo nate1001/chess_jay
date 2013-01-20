@@ -4,7 +4,7 @@ Copyright Nate Carson 2013
 
 from PyQt4 import QtCore, QtGui
 
-from board import BoardWidget
+from board_widget import BoardWidget
 from game_engine import ChessLibGameEngine
 from moves_widget import MovesWidget
 from util import tr, Action, GraphicsWidget

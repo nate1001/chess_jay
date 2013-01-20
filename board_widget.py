@@ -5,7 +5,7 @@ Copyright Nate Carson 2012
 
 from PyQt4 import QtCore, QtGui
 
-from square import SquareWidget, ChessFontDict, PieceWidget, GuideLabelItem
+from square_widget import SquareWidget, ChessFontDict, PieceWidget, GuideLabelItem
 from game_engine import Move, AlgSquare, PaletteSquare, BoardString, Piece
 from util import tr, GraphicsWidget, Action
 import settings

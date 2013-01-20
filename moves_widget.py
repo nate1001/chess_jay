@@ -424,7 +424,7 @@ if __name__ == '__main__':
     app = QtGui.QApplication(sys.argv)
 
     from util import ScalingView
-    from board import BoardWidget
+    from board_widget import BoardWidget
     from game_engine import ChessLibGameEngine, Move
     import db
 
