@@ -22,6 +22,7 @@ def boardSize():
 keys = {
 	'mode_play': QtGui.QKeySequence('1'),
 	'mode_edit': QtGui.QKeySequence('2'),
+	'mode_analyze': QtGui.QKeySequence('3'),
 
 	'move_first': QtGui.QKeySequence.MoveToStartOfLine,
 	'move_previous': QtGui.QKeySequence.MoveToPreviousChar,
@@ -46,6 +47,7 @@ keys = {
 	'game_new': QtGui.QKeySequence('Alt+n'),
 	'game_draw': QtGui.QKeySequence('Alt+d'),
 	'game_resign': QtGui.QKeySequence('Alt+r'),
+	'game_takeback': QtGui.QKeySequence('Alt+t'),
 
 }
 

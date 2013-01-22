@@ -10,6 +10,41 @@ import settings
 def tr(text):
     return text
 
+class SizeF(object):
+    
+    def __init__(self, size):
+        self.w = float(size.width())
+        self.h = float(size.height())
+
+    def toQRectF(self):
+        return QtCore.QRectF(0 ,0 ,self.w, self.h)
+
+    def toSizeF(self):
+        return QtCore.QSizeF(self.w, self.h)
+
+    def __str__(self):
+        return "(%d, %d)" % (self.w, self.h)
+
+
+class RectF(object):
+    
+    def __init__(self, rect):
+        self.x = float(rect.x())
+        self.y = float(rect.y())
+        self.w = float(rect.width())
+        self.h = float(rect.height())
+
+    def toQRectF(self):
+        return QtCore.QRectF(self.x ,self.y ,self.w, self.h)
+
+    def toSizeF(self):
+        return QtCore.QSizeF(self.w, self.h)
+
+    def __str__(self):
+        return "(%d, %d, %d, %d)" % (self.x, self.y, self.w, self.h)
+
+        
+
 
 class Icon(object):
     
@@ -38,12 +73,42 @@ class DropShadow(QtGui.QGraphicsDropShadowEffect):
         self.setColor(QtGui.QColor(210,210,210))
         self.setBlurRadius(2)
 
+
 class Colorize(QtGui.QGraphicsColorizeEffect):
     def __init__(self):
         super(Colorize, self).__init__()
 
 
+class SvgItem(QtSvg.QGraphicsSvgItem):
+    
+    def __init__(self, path, renderer=None):
+
+        if renderer:
+            super(SvgItem, self).__init__()
+            self.setSharedRenderer(renderer)
+        else:
+            super(SvgItem, self).__init__(path)
+    
+    def scaleTo(self, square_side):
+
+        renderer = self.renderer()
+        size = renderer.defaultSize()
+        default_side = max(size.width(), size.height())
+        scale = square_side / float(default_side)
+        self.setScale(scale)
+
+    def size(self):
+        
+        size = self.renderer().defaultSize()
+        scale = self.scale()
+        new_size = QtCore.QSizeF(size.width() * scale, size.height() * scale)
+        return new_size
+
+
 class Action(QtGui.QAction):
+    
+    svg_direc = './media/icons/scalable/'
+    button_size = 32
 
     def __init__(self, parent, label, keycode, tip, callback, icon_name=None):
         super(Action, self).__init__(label, parent)
@@ -56,8 +121,12 @@ class Action(QtGui.QAction):
             self.setIcon(icon)
 
         if icon_name:
-            self.graphics_button = GraphicsButton(icon_name)
-            self.graphics_button.pushed.connect(callback)
+            path = self.svg_direc + icon_name + '.svg'
+            svg = SvgItem(path)
+            svg.scaleTo(self.button_size)
+            self.graphics_button = GraphicsButton(svg)
+
+            self.graphics_button.clicked.connect(callback)
             self.triggered.connect(self.graphics_button.onTriggered)
         else:
             self.graphics_button = None
@@ -153,104 +222,6 @@ class GraphicsWidget(QtGui.QGraphicsWidget):
         self._anim_fade.start()
     
 
-
-class ListWidget(QtGui.QGraphicsWidget):
-    '''
-    Removal of items is not supported. The list should be clear()ed and then rebuilt.
-    Selection or the methods first, last, next, previous move the current item pointer to the requested item, while slices and inding will not move the current item pointer.
-
-    '''
-    def __init__(self):
-        super(ListWidget, self).__init__()
-        
-        self._layout = QtGui.QGraphicsGridLayout()
-        self.setLayout(self._layout)
-        self._idx = None
-        #XXX we need to hold a reference to our items or they disappear
-        self._items = []
-
-    def __iter__(self):
-        for idx in range(self._layout.count()):
-            yield self._layout.itemAt(idx)
-
-    def __len__(self):
-        return self._layout.count()
-    
-    def __nonzero__(self):
-        return self._layout.count() > 0
-
-    def __getitem__(self, key):
-        l = []
-        for item in self:
-            l.append(item)
-        return l[key]
-    
-    def clear(self):
-        for idx in range(self._layout.count()):
-            item = self[0]
-            self._layout.removeAt(0)
-            item.scene().removeItem(item)
-        self._idx = None
-        self._items = []
-    
-    def addItem(self, item, row, col):
-
-        item.itemSelected.connect(self._onItemSelected)
-        self._layout.addItem(item, row, col)
-        self._items.append(item)
-    
-    def index(self, item):
-        for idx, i in enumerate(self):
-            if item is i:
-                return idx
-        raise IndexError(item)
-
-    
-    def _onItemSelected(self, item):
-
-        if self._idx is not None:
-            selected = self[self._idx]
-            selected.setSelected(False)
-
-        for idx, _item in enumerate(self):
-            if item is _item:
-                item.setSelected(True)
-                self._idx = idx
-                return
-        raise ValueError(item)
-    
-
-    def first(self):
-        if not self:
-            return
-        self._idx = 0
-        return self[0]
-
-    def last(self):
-        if not self:
-            return
-        self._idx = len(self) -1
-        return self[-1]
-    
-    def _get(self, offset):
-        if not self or (offset < 0 and self._idx + offset < 0):
-            return
-        try:
-            self[self._idx + offset]
-            self._idx += offset
-            return self[self._idx]
-        except IndexError:
-            return
-
-    def next(self):
-        return self._get(1)
-
-    def previous(self):
-        return self._get(-1)
-    
-    def current(self):
-        return self._get(0)
-    
 
 class TextWidget(GraphicsWidget):
 
@@ -437,35 +408,24 @@ class AspectLayout(QtGui.QLayout):
 
 
 
-class SvgIcon(QtSvg.QGraphicsSvgItem):
-    
-    scalefactor = .8
-
-    #FIXME
-    direc = './media/icons/scalable/'
-    def __init__(self, name):
-        path = SvgIcon.direc + name + '.svg'
-        super(SvgIcon, self).__init__(path)
-        self.setScale(self.scalefactor)
-
-    
-    def size(self):
-        rect = self.boundingRect()
-        w, h  = rect.width(), rect.height()
-        scale = self.scale()
-        return QtCore.QSizeF(w * scale, h * scale)
-
-
 class GraphicsButton(GraphicsWidget):
 
-    pushed = QtCore.pyqtSignal(GraphicsWidget)
+    clicked = QtCore.pyqtSignal(GraphicsWidget)
+    toggled = QtCore.pyqtSignal(GraphicsWidget, bool)
+
     outline_width = .5
     hover_scale = 1.10
     press_scale = .95
+    padding_percent = .3
 
-    def __init__(self, name):
+    checked_color = QtGui.QColor('gray')
+
+    def __init__(self, item, checkable=False, data=None):
         super(GraphicsButton, self).__init__()
 
+        self.data = data
+        self._checkable = checkable
+        self._checked = False
         # set these up when we are sure we know thier position
         self._anim_hover = None
         self._anim_press = None
@@ -474,17 +434,32 @@ class GraphicsButton(GraphicsWidget):
         self.box.setPen(QtGui.QPen(settings.COLOR_NONE, self.outline_width))
         self.box.setParentItem(self)
 
-        self.icon = SvgIcon(name)
-        self.icon.setParentItem(self)
+        self.item = item
+        self.item.setParentItem(self)
 
         self.setGraphicsEffect(DropShadow())
 
-        size = self.icon.size()
-        rect = QtCore.QRectF(0,0,size.width(),size.height())
+        size = SizeF(self.size())
+        padding = (max(size.w, size.h) * self.padding_percent) / 2
+        self.item.setPos(padding, padding)
+        rect = QtCore.QRectF(0, 0, size.w, size.h)
         self.box.setRect(rect)
 
         self.setAcceptHoverEvents(True)
-    
+
+    @property
+    def checked(self):
+        return self._checked
+
+    @checked.setter
+    def checked(self, checked):
+        
+        if checked:
+            color = self.checked_color
+        else:
+            color = settings.COLOR_NONE
+        self.box.setBrush(QtGui.QBrush(color))
+        self._checked = checked
 
     def onTriggered(self):
         self.mousePressEvent(None)
@@ -493,18 +468,21 @@ class GraphicsButton(GraphicsWidget):
 
         # if this is not a dummy event
         if event is not None:
+            event.ignore()
             if event.button() != QtCore.Qt.LeftButton:
-                event.ignore()
                 return
-            self.pushed.emit(self)
+            self.clicked.emit(self)
 
         # set up animation now that we know our position
         if self._anim_press is None:
             self._anim_press = PressAnimation(self, self.press_scale, settings.animation_duration/2)
 
         self._anim_press.start()
-        
 
+        if self._checkable:
+            self.checked = not self.checked
+            self.toggled.emit(self, self.checked)
+        
     def hoverEnterEvent(self, event):
         # set up animation now that we know our position
         if self._anim_hover is None:
@@ -516,11 +494,11 @@ class GraphicsButton(GraphicsWidget):
         self._anim_hover.goBackward()
     
     def size(self):
-        rect = self.icon.boundingRect()
-        w, h  = rect.width(), rect.height()
-        scale = self.scale()
-        size = QtCore.QSizeF(w * scale - w * .25, h * scale - h *.25)
-        return size
+        size = SizeF(self.item.size())
+        pct = self.padding_percent
+        size.w = size.w + (size.w * pct)
+        size.h = size.h + (size.h * pct)
+        return size.toSizeF()
     
     def sizeHint(self, which, constraint=None):
         return self.size()

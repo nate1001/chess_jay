@@ -1,7 +1,7 @@
 
 from PyQt4 import QtCore, QtGui
 from util import TextWidget, GraphicsWidget, Action, tr, ToolBar, GraphicsButton
-from game_engine import GameMove, BoardString
+from game_engine import GameMove
 import settings
 
 class MoveItem(TextWidget):
@@ -169,11 +169,10 @@ class MovePagingList(PagingList):
 
     moveSelected = QtCore.pyqtSignal(GameMove, int)
 
-    def __init__(self, board, width):
+    def __init__(self, width):
         super(MovePagingList, self).__init__(width)
 
         self._last_selected = None
-        self.newGame(board, True)
 
         #TODO: investigate / add bug report for this behavior.
         #XXX
@@ -236,23 +235,14 @@ class MovePagingList(PagingList):
             item.setWhite()
         super(MovePagingList, self).append(item)
 
-    def newGame(self, boardstring, iswhite):
+    def newGame(self, initial_move):
 
-        start = GameMove(
-            'Start',
-            0,
-            False,
-            None,
-            boardstring,
-            None,
-            None,
-            None,
-            None
-        )
+        #FIXME use iswhite
         self.clear()
-        self._setDummyMove(0, False)
-        self.append(start)
+        self._setDummyMove(0, True)
+        self.append(initial_move)
         self._last_selected = None
+        self.first()
 
     def onMoveItemSelected(self, item):
         last = self._last_selected
@@ -273,17 +263,21 @@ class MovesWidget(GraphicsWidget):
         
         self.game_engine = game_engine
         self.board = board
+        self.move_list = MovePagingList(312)
+        self.newGame()
 
-        bstring = game_engine.position.fen.to_boardstring()
-        self.move_list = MovePagingList(bstring, 312)
+        # signals
 
+        #board.boardChanged.connect(self.resetEngine)
         self.move_list.moveSelected.connect(self.onMoveSelected)
-        self.board.newMove.connect(self.onNewMove)
+        self.board.new_move.connect(self.onNewMove)
 
         actions = [
             Action(self, "New Game", settings.keys['game_new'], tr("New Game"), self.newGame, 'document-new'),
-            Action(self, "Draw", settings.keys['game_draw'], tr("Offer Draw"), self.offerDraw, 'face-plain'),
-            Action(self, "Resign", settings.keys['game_resign'], tr("Resign Game"), self.resignGame, 'face-sad'),
+            # These can go with player.
+            #Action(self, "Take Back", settings.keys['game_takeback'], tr("Take Back Move"), self.takebackMove, 'edit-delete'),
+            #Action(self, "Draw", settings.keys['game_draw'], tr("Offer Draw"), self.offerDraw, 'face-plain'),
+            #Action(self, "Resign", settings.keys['game_resign'], tr("Resign Game"), self.resignGame, 'face-sad'),
         ]
         self.addActions(actions)
 
@@ -317,11 +311,11 @@ class MovesWidget(GraphicsWidget):
             action.setVisible(enabled)
 
     def newGame(self):
-        b = BoardString()
-        self.game_engine.newGame(b)
-        self.move_list.newGame(b, True)
-        self.board.setBoard(b)
-        return b
+
+        self.game_engine.newGame()
+        inital = self.game_engine.initialMove()
+        self.move_list.newGame(inital)
+        self.board.setBoard(self.game_engine.toBoardstring())
     
     def loadGame(self, moves):
 
@@ -336,7 +330,7 @@ class MovesWidget(GraphicsWidget):
         self.game_engine = game_engine
     
     def resetEngine(self, boardstring):
-        self.game_engine.reset(boardstring)
+        self.game_engine.newGame(boardstring)
     
     def onMoveSelected(self, move, diff):
 
@@ -395,6 +389,9 @@ class MovesWidget(GraphicsWidget):
         pass
 
     def resignGame(self):
+        pass
+
+    def takebackMove(self):
         pass
 
 

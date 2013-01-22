@@ -5,13 +5,16 @@ Copyright Nate Carson 2012
 
 from PyQt4 import QtCore, QtGui
 
-from square_widget import SquareWidget, ChessFontDict, PieceWidget, GuideLabelItem
-from game_engine import Move, AlgSquare, PaletteSquare, BoardString, Piece
+from square_widget import SquareWidget, ChessFontDict, PieceItem, GuideLabelItem
+from fen_widget import FenWidget
+from game_engine import Move, AlgSquare, PaletteSquare, Piece, BoardString
 from util import tr, GraphicsWidget, Action
 import settings
 
 
 class MoveError(Exception): pass
+
+
 
 
 class BoardItem(QtGui.QGraphicsRectItem):
@@ -31,7 +34,7 @@ class BoardItem(QtGui.QGraphicsRectItem):
         for item in self._squares.itervalues():
             yield item
     
-    def __str__(self):
+    def __repr__(self):
         return "<BoardItem %s>" % self.toString()
 
     def size(self):
@@ -67,7 +70,7 @@ class BoardItem(QtGui.QGraphicsRectItem):
             piece = self._squares[square.label].getPiece()
             if piece:
                 string[idx] = piece.name
-        return ''.join(string)
+        return BoardString(''.join(string))
     
     def _createSquares(self, boardstring):
         # AlgSquares
@@ -84,7 +87,7 @@ class BoardItem(QtGui.QGraphicsRectItem):
         item.setPos((x-1) * side , (8 - y) * side)
 
     def _createPiece(self, square, symbol):
-        piece = PieceWidget(self._font[symbol])
+        piece = PieceItem(self._font[symbol])
         square.addPiece(piece)
     
     def _createSquare(self, algsquare, symbol):
@@ -138,14 +141,14 @@ class PaletteItem(BoardItem):
 class BoardWidget(GraphicsWidget):
     '''
         BoardWidget keeps tracks of the squares and moves pieces around.
-        The newMove signal will be emitted when two squares with pieces are clicked
+        The new_move signal will be emitted when two squares with pieces are clicked
         or a piece is dragged to another square. It does not move the piece but delegates
         to the game widget to check the validity of the move. The game widget will then call
         the board widget to move the piece.
     '''
 
-    newMove = QtCore.pyqtSignal(Move)
-    boardChanged = QtCore.pyqtSignal(str)
+    new_move = QtCore.pyqtSignal(Move)
+    board_changed = QtCore.pyqtSignal(BoardString)
 
     spacing = 10
 
@@ -156,15 +159,18 @@ class BoardWidget(GraphicsWidget):
         self.cursor = None
         self.squares = BoardItem()
         self.palette = PaletteWidget(PaletteItem())
-        self.fen = FenTextWidget()
 
         self._selected_square = None
         self._editable = False
 
-        self.boardChanged.connect(self.fen.setFen)
         self.squares.setParentItem(self)
         self.palette.setParentItem(self)
         self.palette.setPos(settings.boardSize()+ self.spacing, 0)
+
+        #fen
+        self.fen = FenWidget(self)
+        self.fen.setParentItem(self)
+        self.fen.setPos(settings.boardSize()+ self.spacing + self.palette.size().width(), 0)
 
         actions = [
             Action(self, "New", settings.keys['board_new'], tr("reset to starting"), self.onNewBoard, 'document-new'),
@@ -187,7 +193,10 @@ class BoardWidget(GraphicsWidget):
     def size(self):
         a = self.squares.boundingRect()
         b = self.palette.item.boundingRect()
-        return QtCore.QSizeF(a.width() + b.width() + self.spacing, max(a.height(), b.height()))
+        c = self.fen.size()
+        return QtCore.QSizeF(
+            a.width() + b.width() + c.width() + self.spacing, 
+            max(a.height(), b.height(), c.height()))
     
     def sizeHint(self, which, constraint):
         if which == QtCore.Qt.PreferredSize:
@@ -198,7 +207,7 @@ class BoardWidget(GraphicsWidget):
         '''
             Makes the appropiate move or raises a value error.
             Does not call itself but waits for the parent widget to call it 
-            after BoardWidget emits a newMove signal.
+            after BoardWidget emits a new_move signal.
 
             uncapture will add back pieces for moving back in a game.
         '''
@@ -246,14 +255,14 @@ class BoardWidget(GraphicsWidget):
         return piece
     
     def _addPiece(self, square, symbol):
-        piece = PieceWidget(self.squares._font[symbol])
+        piece = PieceItem(self.squares._font[symbol])
         piece.fadeIn(settings.animation_duration)
         square.addPiece(piece)
 
     def onSquareDoubleClicked(self, square):
         if self._editable and not square.algsquare.isPalette() and square.getPiece():
             self._removePiece(square)
-            self.boardChanged.emit(self.squares.toString())
+            self.board_changed.emit(self.squares.toString())
         self._selected_square = None
         square.setSelected(False)
     
@@ -286,7 +295,7 @@ class BoardWidget(GraphicsWidget):
                         if tosquare.getPiece():
                             self._removePiece(tosquare)
                         self._addPiece(tosquare, fromsquare.getPiece().name)
-                        self.boardChanged.emit(self.squares.toString())
+                        self.board_changed.emit(self.squares.toString())
                     else:
                         # we cannot use the palette if we are not editing
                         pass
@@ -297,10 +306,10 @@ class BoardWidget(GraphicsWidget):
                     # if we are editing then just move the piece
                     if self._editable:
                         self.movePiece(move)
-                        self.boardChanged.emit(self.squares.toString())
+                        self.board_changed.emit(self.squares.toString())
                     # else mother may I
                     else:
-                        self.newMove.emit(move)
+                        self.new_move.emit(move)
 
                 fromsquare.setSelected(False)
                 self._selected_square = None
@@ -331,8 +340,8 @@ class BoardWidget(GraphicsWidget):
             self.palette.fadeIn(settings.animation_duration)
             self.fen.fadeIn(settings.animation_duration)
         else:
-            self.fen.fadeOut(settings.animation_duration)
             self.palette.fadeOut(settings.animation_duration)
+            self.fen.fadeOut(settings.animation_duration)
 
         self._editable = editable
         for action in self.actions():
@@ -386,24 +395,7 @@ class BoardWidget(GraphicsWidget):
         self.cursor._enabled = enable
     
 
-class FenTextWidget(GraphicsWidget):
-    def __init__(self):
-        super(FenTextWidget, self).__init__()
-        self.item = FenTextItem()
-        self.item.setParentItem(self)
-
-    def setFen(self, fen):
-        self.item.setPlainText(fen)
-
-class FenTextItem(QtGui.QGraphicsTextItem):
     
-    def __init__(self):
-        super(FenTextItem, self).__init__()
-        self.setTextInteractionFlags(QtCore.Qt.TextEditorInteraction | QtCore.Qt.TextSelectableByKeyboard )
-        self.setFlags(QtGui.QGraphicsItem.ItemIsSelectable | QtGui.QGraphicsItem.ItemIsFocusable | QtGui.QGraphicsItem.ItemIsMovable);
-    
-
-
 class CursorWidget(GraphicsWidget):
     
     moveCursor = QtCore.pyqtSignal(SquareWidget)
@@ -515,8 +507,8 @@ if __name__ == '__main__':
 
     board = BoardWidget()
     board.setBoard(string)
-    board.newMove.connect(onMove)
-    board.boardChanged.connect(onBoardChanged)
+    board.new_move.connect(onMove)
+    board.board_changed.connect(onBoardChanged)
     board.setEditable(True)
     board.toggleGuides()
     #board.toggleLabels()
