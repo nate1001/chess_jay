@@ -15,8 +15,6 @@ import settings
 class MoveError(Exception): pass
 
 
-
-
 class BoardItem(QtGui.QGraphicsRectItem):
 
     def __init__(self):
@@ -149,6 +147,10 @@ class BoardWidget(GraphicsWidget):
 
     new_move = QtCore.pyqtSignal(Move)
     board_changed = QtCore.pyqtSignal(BoardString)
+    editing_finished = QtCore.pyqtSignal(str) # arg is fen
+
+    start_fen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
+    empty_fen = '8/8/8/8/8/8/8/8 w - - 0 1'
 
     spacing = 10
 
@@ -161,47 +163,53 @@ class BoardWidget(GraphicsWidget):
         self.palette = PaletteWidget(PaletteItem())
 
         self._selected_square = None
-        self._editable = False
+        self._editable = True
+
+        # FIXME: cannot set editable until we the board is set from setFen becuase
+        # we do not have a cursor yet
+        #self.editable = True
 
         self.squares.setParentItem(self)
         self.palette.setParentItem(self)
         self.palette.setPos(settings.boardSize()+ self.spacing, 0)
 
         #fen
-        self.fen = FenWidget(self)
+        self.fen = FenWidget(self.squares)
         self.fen.setParentItem(self)
         self.fen.setPos(settings.boardSize()+ self.spacing + self.palette.size().width(), 0)
+        self.fen.setOrientation(QtCore.Qt.Vertical)
 
         actions = [
-            Action(self, "New", settings.keys['board_new'], tr("reset to starting"), self.onNewBoard, 'document-new'),
-            Action(self, "Clear", settings.keys['board_clear'], tr("remove pieces"), self.onClearPieces, 'edit-clear'),
+            Action(self, "New Board", settings.keys['board_new'], tr("reset to starting"), self._onNewBoard, 'document-new'),
+            Action(self, "Clear Board", settings.keys['board_clear'], tr("remove pieces"), self._onClearBoard, 'edit-clear'),
+            Action(self, "Flip Board", settings.keys['board_flip'], tr("flip board"), self._onFlipBoard, 'edit-clear'),
         ]
         self.addActions(actions)
-        new, clear = [a.graphics_button for a in self.actions()]
+        new, clear, flip = [a.graphics_button for a in self.actions()]
         new.setParentItem(self.palette)
         clear.setParentItem(self.palette)
         clear.setPos(new.size().width(), 0)
+
+    def _onClearBoard(self):
+        self.setFen(self.empty_fen)
+
+    def _onFlipBoard(self):
+        pass
     
-    def onClearPieces(self):
-        empty = BoardString.EMPTY_SQUARE * 64
-        self.squares.setBoard(empty)
-    
-    def onNewBoard(self):
-        new = BoardString()
-        self.squares.setBoard(new)
+    def _onNewBoard(self):
+        self.setFen(self.start_fen)
 
     def size(self):
         a = self.squares.boundingRect()
         b = self.palette.item.boundingRect()
         c = self.fen.size()
+
         return QtCore.QSizeF(
-            a.width() + b.width() + c.width() + self.spacing, 
+            (a.width() + b.width() + c.width() + self.spacing * 2),
             max(a.height(), b.height(), c.height()))
     
     def sizeHint(self, which, constraint):
-        if which == QtCore.Qt.PreferredSize:
-            return self.size()
-        return QtCore.QSizeF()
+        return self.size()
 
     def movePiece(self, move, uncapture=None):
         '''
@@ -247,6 +255,8 @@ class BoardWidget(GraphicsWidget):
 
         if uncapture:
             self._addPiece(fromsquare, uncapture)
+
+        self.board_changed.emit(self.squares.toString())
     
     def _removePiece(self, square, nofade=False):
         piece = square.removePiece()
@@ -306,7 +316,6 @@ class BoardWidget(GraphicsWidget):
                     # if we are editing then just move the piece
                     if self._editable:
                         self.movePiece(move)
-                        self.board_changed.emit(self.squares.toString())
                     # else mother may I
                     else:
                         self.new_move.emit(move)
@@ -334,14 +343,21 @@ class BoardWidget(GraphicsWidget):
         settings.show_guides = not settings.show_guides
         for square in self.squares:
             square.guide and square.guide.setVisible(settings.show_guides)
-    
-    def setEditable(self, editable):
+
+    @property
+    def editable(self):
+        return self._editable
+        
+    @editable.setter
+    def editable(self, editable):
         if editable:
             self.palette.fadeIn(settings.animation_duration)
             self.fen.fadeIn(settings.animation_duration)
         else:
             self.palette.fadeOut(settings.animation_duration)
             self.fen.fadeOut(settings.animation_duration)
+            if self._editable:
+                self.editing_finished.emit(str(self.fen))
 
         self._editable = editable
         for action in self.actions():
@@ -364,8 +380,11 @@ class BoardWidget(GraphicsWidget):
             pos = square.pos()
         self.cursor.move(pos, settings.animation_duration)
     
-    def setBoard(self, boardstring):
-        self.squares.setBoard(str(boardstring))
+    def setFen(self, fen):
+
+        self.squares.setBoard(BoardString(fen))
+        self.fen.setValue(str(fen))
+
         for square in self.squares:
             square.squareSelected.connect(self.onSquareSelected)
             square.squareDoubleClicked.connect(self.onSquareDoubleClicked)
@@ -406,7 +425,7 @@ class CursorWidget(GraphicsWidget):
         self.item.setParentItem(self)
         self.getsquare_callback = getsquare_callback
 
-        self._use_palette = False
+        self._use_palette = True
 
         direcs = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest']
         for direc in direcs:
@@ -479,47 +498,61 @@ class CursorItem(QtGui.QGraphicsRectItem):
 
 if __name__ == '__main__':
 
-    class View(QtGui.QGraphicsView):
+    import sys
 
-        def __init__(self, scene):
+    class View(QtGui.QGraphicsView):
+        def __init__(self, scene, board):
+            
             super(View, self).__init__(scene)
 
+
+            board.new_move.connect(self.onMove)
+            board.board_changed.connect(self.onBoardChanged)
+            board.fen.changed.connect(self.onFenChanged)
+            board.editing_finished.connect(self.onEditingFinished)
+
+            self.board = board
+
         def keyPressEvent(self, event):
+
             if event.key() == QtCore.Qt.Key_Escape:
                 self.close()
+
+            elif event.key() == QtCore.Qt.Key_Space:
+                self.board.editable = not board.editable 
+
             super(View, self).keyPressEvent(event)
 
+        # board.new_move will emit only if editable is False
+        def onMove(self, move):
+            sys.stdout.write('new move: {0}\n'.format(move))
+            board.movePiece(move)
 
-    def onMove(move):
-        print 11, move
-    def onBoardChanged(board):
-        print 22, board
+        # board.board_changed will emit only if editable is True
+        def onBoardChanged(self, board):
+            sys.stdout.write('board changed: {0}\n'.format(board))
 
-    import sys
+        def onFenChanged(self, fen):
+            sys.stdout.write('fen changed: {0}\n'.format(fen))
+
+        def onEditingFinished(self, fen):
+            sys.stdout.write('finished editing: {0}\n'.format(fen))
 
     app = QtGui.QApplication(sys.argv)
     scene = QtGui.QGraphicsScene()
-    # XXX must construct view before adding stuff to scene or
-    #     recursive ghost resize events occur.
-    view = View(scene)
-
-    string = str(BoardString())
 
     board = BoardWidget()
-    board.setBoard(string)
-    board.new_move.connect(onMove)
-    board.board_changed.connect(onBoardChanged)
-    board.setEditable(True)
+    board.setFen(board.start_fen)
+
     board.toggleGuides()
-    #board.toggleLabels()
+    board.toggleLabels()
     #board.cursorSetEnabled(False)
     scene.addItem(board)
+
     
-    m = view.contentsMargins()
-    size = board.sizeHint(QtCore.Qt.PreferredSize, None)
-    width = size.width() + m.left() + m.right() + 1
-    height = size.height() + m.top() + m.bottom() + 1
-    view.setGeometry(0, 0, width, height)
+    view = View(scene, board)
+    size = board.sizeHint(None, None)
+    view.setGeometry(0, 0, size.width() * 1.1, size.height() * 1.1)
     view.show()
 
     sys.exit(app.exec_())

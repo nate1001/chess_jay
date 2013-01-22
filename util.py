@@ -197,6 +197,12 @@ class GraphicsWidget(QtGui.QGraphicsWidget):
         self._anim_move = QtCore.QPropertyAnimation(self, 'pos')
         self._anim_scale = QtCore.QPropertyAnimation(self, 'scale')
 
+    def getGraphicsButtonLayout(self):
+        
+        layout = QtGui.QGraphicsLinearLayout()
+        for action in self.actions():
+            layout.addItem(action.graphics_button)
+        return layout
     
     def move(self, new, duration, old=None):
 
@@ -420,11 +426,12 @@ class GraphicsButton(GraphicsWidget):
 
     checked_color = QtGui.QColor('gray')
 
-    def __init__(self, item, checkable=False, data=None):
+    def __init__(self, item, checkable=False, radio=False, data=None):
         super(GraphicsButton, self).__init__()
 
         self.data = data
         self._checkable = checkable
+        self._radio = radio
         self._checked = False
         # set these up when we are sure we know thier position
         self._anim_hover = None
@@ -479,7 +486,10 @@ class GraphicsButton(GraphicsWidget):
 
         self._anim_press.start()
 
-        if self._checkable:
+        if self._checkable and self._radio:
+            self.checked = True
+
+        elif self._checkable:
             self.checked = not self.checked
             self.toggled.emit(self, self.checked)
         

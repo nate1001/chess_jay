@@ -40,7 +40,8 @@ keys = {
 	'cursor_select': QtCore.Qt.Key_Return,
 
 	'board_new': QtGui.QKeySequence('Alt+n'),
-	'board_clear': QtGui.QKeySequence('Alt+k'),
+	'board_clear': QtGui.QKeySequence('Alt+c'),
+	'board_flip': QtGui.QKeySequence('Alt+f'),
 	'board_guides': QtGui.QKeySequence(''),
 	'board_labels': QtGui.QKeySequence(''),
 

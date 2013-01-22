@@ -4,19 +4,31 @@ from PyQt4 import QtCore, QtGui
 from util import GraphicsWidget, GraphicsButton, RectF, SizeF
 import settings
 from square_widget import ChessFontDict, PieceItem
+from game_engine import BoardString
 
 import sys
 sys.path.append('../python-chess/')
 from chess import Piece, Square
+
+class FenPartWidget(GraphicsWidget):
+
+    updated = QtCore.pyqtSignal()
+
+    def __init__(self):
+
+        super(FenPartWidget, self).__init__()
+        self.item = self.item_class()
+
+        button = GraphicsButton(self.item)
+        button.setParentItem(self)
+        button.clicked.connect(self.onClicked)
 
 
 class TurnItem(QtGui.QGraphicsRectItem):
 
     white = QtGui.QColor('white')
     black = QtGui.QColor('black')
-
     side = settings.square_size / 2
-
 
     def __init__(self):
 
@@ -45,48 +57,50 @@ class TurnItem(QtGui.QGraphicsRectItem):
 
         self._iswhite = iswhite
 
+class TurnWidget(FenPartWidget):
 
-class TurnWidget(GraphicsWidget):
-
-    updated = QtCore.pyqtSignal()
-
-    def __init__(self):
-        super(TurnWidget, self).__init__()
-        self.turn = TurnItem()
-        button = GraphicsButton(self.turn)
-        button.setParentItem(self)
-        button.clicked.connect(self.onClicked)
+    item_class = TurnItem
 
     def onClicked(self, button):
-        self.turn.iswhite = not self.turn.iswhite
+        self.item.iswhite = not self.item.iswhite
         self.updated.emit()
+
+    def setValue(self, value):
+        if value == 'w':
+            self.item.iswhite = True
+        elif value == 'b':
+            self.item.iswhite = False
+        else:
+            raise ValueError(value)
 
     @property
     def iswhite(self):
-        return self.turn.iswhite
+        return self.item.iswhite
 
     def __str__(self):
-        return 'w' if self.turn.iswhite else 'b'
+        return 'w' if self.item.iswhite else 'b'
 
     def sizeHint(self, which, constraint):
-        return self.turn.size() * 1.25
+        return self.item.size() * 1.25
 
 
 class CastleRightsWidget(GraphicsWidget):
 
     updated = QtCore.pyqtSignal()
 
+    default = Piece.castleclass
+    side = settings.square_size / 2
+
     def __init__(self, font):
 
         super(CastleRightsWidget, self).__init__()
 
         self._buttons = []
-        side = settings.square_size / 2
         layout = QtGui.QGraphicsLinearLayout()
 
-        for idx, symbol in enumerate(Piece.castleclass):
+        for idx, symbol in enumerate(self.default):
             piece = PieceItem(font[symbol])
-            piece.scaleTo(side)
+            piece.scaleTo(self.side)
             button = GraphicsButton(piece, checkable=True, data=symbol)
             button.checked = True
             button.toggled.connect(self.onToggled)
@@ -94,6 +108,23 @@ class CastleRightsWidget(GraphicsWidget):
             layout.addItem(button)
 
         self.setLayout(layout)
+
+    def setValue(self, value):
+
+        if value == '-':
+            for button in self._buttons:
+                button.checked = False
+            return
+
+        for castle in value:
+            if castle not in Piece.castleclass:
+                raise ValueError(value)
+
+        for button in self._buttons:
+            if button.data in value:
+                button.checked = True
+            else:
+                button.checked = False
 
     def onToggled(self, castle, checked):
         self.updated.emit()
@@ -125,7 +156,6 @@ class EnPassantWidget(GraphicsWidget):
         self.turn = turn
         self._buttons = []
 
-
         layout = QtGui.QGraphicsLinearLayout()
         for idx, symbol in enumerate(Square.files):
             item = CharacterItem(symbol)
@@ -134,6 +164,25 @@ class EnPassantWidget(GraphicsWidget):
             self._buttons.append(button)
             layout.addItem(button)
         self.setLayout(layout)
+
+    def setValue(self, value):
+        
+        if value == '-':
+            for button in self._buttons:
+                button.checked = False
+            return
+
+        if len(str(value)) == 2:
+            value = str(value)[0]
+
+        if value not in Square.files:
+            raise ValueError(value)
+            
+        for button in self._buttons:
+            if value == button.data:
+                button.checked = True
+            else:
+                button.checked = False
 
     def onToggled(self, button, checked):
         for other in self._buttons:
@@ -179,54 +228,82 @@ class IntegerWidget(GraphicsWidget):
         else:
             event.ignore()
             return
-        if value > self.maximum or value < self.minimum:
-            return
-        self.item.setText(str(value))
+        self.setValue(value)
         self.updated.emit()
+
+    def setValue(self, value):
+        if not (value <= self.maximum or value >= self.minimum):
+            raise ValueError(value)
+        self.item.setText(str(value))
 
     def __str__(self):
         return str(self.item.text())
 
 
-class FenTextItem(QtGui.QGraphicsTextItem):
+class FenTextWidget(GraphicsWidget):
     
     def __init__(self):
-        super(FenTextItem, self).__init__()
+        super(FenTextWidget, self).__init__()
+            
+        text = QtGui.QGraphicsTextItem()
+        text.setFlag(QtGui.QGraphicsItem.ItemIsMovable)
+        text.setFlag(QtGui.QGraphicsItem.ItemIsSelectable)
+        text.setTextInteractionFlags(QtCore.Qt.TextEditorInteraction)
+        text.setParentItem(self)
+        self.text = text
 
-        self.setFlag(QtGui.QGraphicsItem.ItemIsMovable)
-        self.setFlag(QtGui.QGraphicsItem.ItemIsSelectable)
-        self.setTextInteractionFlags(QtCore.Qt.TextEditorInteraction)
+    def size(self):
+        return RectF(self.text.boundingRect()).toSizeF()
+
+    def setPlainText(self, text):
+        self.text.setPlainText(text)
 
 
 class FenWidget(GraphicsWidget):
 
-    updated = QtCore.pyqtSignal(str)
+    changed = QtCore.pyqtSignal(str)
     
-    def __init__(self, board):
+    def __init__(self, squares):
 
         super(FenWidget, self).__init__()
 
         font = ChessFontDict(settings.chess_font)
 
-        self.board = board
-        self.board.board_changed.connect(self.onUpdated)
-
+        self.squares = squares
         self.turn = TurnWidget()
         self.castle = CastleRightsWidget(font)
         self.enpassant = EnPassantWidget(font, self.turn)
-        self.fiftymove = IntegerWidget(0, 0, 100)
+        self.fiftymove = IntegerWidget(0, 0, 10**10)
         self.fullmove = IntegerWidget(1, 1, 10**10)
 
         layout = QtGui.QGraphicsLinearLayout()
         for widget in [self.turn, self.castle, self.enpassant, self.fiftymove, self.fullmove]:
-            widget.updated.connect(self.onUpdated)
+            widget.updated.connect(self._onChanged)
             layout.addItem(widget)
         self.setLayout(layout)
 
-        self.text = FenTextItem() 
-        self.updated.connect(self.text.setPlainText)
+        self.text = FenTextWidget() 
+        self.changed.connect(self.text.setPlainText)
 
-        self.setOrientation(QtCore.Qt.Vertical)
+    def _onChanged(self):
+        self.changed.emit(str(self))
+
+    def setValue(self, fen):
+
+        board, turn, castle, enpassant, fiftymove, fullmove = fen.split(' ')
+
+        ### XXX do not set the squares
+        #self.squares.setBoard(BoardString(board))
+
+        self.turn.setValue(turn)
+        self.castle.setValue(castle)
+        self.enpassant.setValue(enpassant)
+        self.fiftymove.setValue(fiftymove)
+        self.fullmove.setValue(fullmove)
+
+        fen = str(self)
+        self.text.setPlainText(fen)
+        self.changed.emit(fen)
 
     def setOrientation(self, orientation):
 
@@ -234,14 +311,12 @@ class FenWidget(GraphicsWidget):
         self.castle.layout().setOrientation(orientation)
         self.enpassant.layout().setOrientation(orientation)
 
-    def onUpdated(self):
-        self.updated.emit(str(self))
 
     def __str__(self):
         return ' '.join(
         [
             str(i) for i in
-            [   self.board.squares.toString().toFen(), 
+            [   self.squares.toString().toFen(), 
                 self.turn, 
                 self.castle, 
                 self.enpassant, 
@@ -251,8 +326,9 @@ class FenWidget(GraphicsWidget):
         ])
 
 
-
 if __name__ == '__main__':
+
+    import sys
 
     class View(QtGui.QGraphicsView):
         def __init__(self, scene):
@@ -262,37 +338,26 @@ if __name__ == '__main__':
             if event.key() == QtCore.Qt.Key_Escape:
                 self.close()
 
-       #def resizeEvent(self, event):
-       #    old_side = min(event.oldSize().width(), event.oldSize().height())
-       #    new_side = min(event.size().width(), event.size().height())
-       #    if old_side == -1 or new_side == -1:
-       #        return
-       #    factor = float(new_side) / old_side 
-       #    self.scale(factor, factor)
+    def onChanged(new_fen):
+        sys.stdout.write('fen changed: ' + new_fen + '\n')
 
-    
-    import sys
     app = QtGui.QApplication(sys.argv)
 
     sys.path.append('../python-chess/')
-
     from chess import Fen
-    from board_widget import BoardWidget, BoardString
+    from board_widget import BoardItem
 
+    f = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq c3 0 1'
 
-    string = BoardString()
-    board = BoardWidget()
-    board.setBoard(string)
-
-    widget = FenWidget(board)
-    text = FenTextItem() 
-    text.setPlainText(str(widget))
-    widget.updated.connect(text.setPlainText)
+    widget = FenWidget(BoardItem())
+    widget.setValue(str(Fen()))
+    widget.changed.connect(onChanged)
 
     scene = QtGui.QGraphicsScene()
     scene.addItem(widget)
-    scene.addItem(text)
-    text.setPos(0, 50)
+    scene.addItem(widget.text)
+    widget.text.setPos(0, 50)
+
     view = View(scene)
     view.setGeometry(100, 100, 800, 200)
     view.show()

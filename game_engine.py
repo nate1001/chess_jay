@@ -64,7 +64,6 @@ class BoardString(object):
     def toFen(self):
         
         fen = ''
-
         for y in xrange(8):
             empties = 0
             for x in xrange(8):
@@ -163,22 +162,20 @@ class PaletteSquare(AlgSquare):
 
 
 
-'''
-class DumbGameEngine(AbstractGameEngine):
-    # all moves are legal ... no checking
+#   class DumbGameEngine(AbstractGameEngine):
+#       # all moves are legal ... no checking
 
-    def __init__(self):
-        super(DumbGameEngine, self).__init__()
-    
-    def validateMove(self, move):
-        return True
-        # if our start square is empty
-        if self.boardstring.isEmpty(move.ssquare):
-            return False
-        return True
+#       def __init__(self):
+#           super(DumbGameEngine, self).__init__()
+#       
+#       def validateMove(self, move):
+#           return True
+#           # if our start square is empty
+#           if self.boardstring.isEmpty(move.ssquare):
+#               return False
+#           return True
 
-        return game_move
-'''
+#           return game_move
 
 
 
@@ -190,8 +187,8 @@ class GameMove(object):
         self.san = san
         self.movenum = movenum
         self.iswhite = iswhite
-        self.board_before = before
-        self.board_after = after
+        self.fen_before = before
+        self.fen_after = after
         self.source = source
         self.target = target
         self.captured = captured
@@ -210,8 +207,8 @@ class GameMove(object):
             self.san,
             self.movenum,
             self.iswhite,
-            self.board_after,
-            self.board_before,
+            self.fen_after,
+            self.fen_before,
             self.target,
             self.source,
             self.captured,
@@ -245,18 +242,25 @@ class ChessLibGameEngine(object):
             ('k', 'g8', 'e8'): Move.from_uci('f8h8'),
             ('k', 'c8', 'e8'): Move.from_uci('d8a8'),
         }
-        self.position = Position()
+        self.position = None
+        self._start_name = None
 
-    def newGame(self, boardstring=None):
+    @property
+    def fen(self):
+        return self.position and str(self.position.fen)
+        
+
+    def newGame(self, fen=None):
 
         #if we have a boardstring
-        if boardstring:
+        if fen:
             turn = self.position.fen.turn 
-            fen = BoardString(boardstring).toFen(turn)
             self.position = Position(fen)
+            self._start_name = "Custom"
         # else let it set to the default position
         else:
             self.position = Position()
+            self._start_name = "Start"
 
     def makeMove(self, move):
         san = SanNotation(self.position, move)
@@ -264,9 +268,9 @@ class ChessLibGameEngine(object):
         captured = self.position[move.target]
         movenum = self.position.fen.full_move
         iswhite = self.position.fen.turn == 'w'
-        before = BoardString(self.position.fen)
+        before = self.fen
         self.position.make_move(move)
-        after = BoardString(self.position.fen)
+        after = self.fen
 
         game_move = GameMove(
             str(san),
@@ -312,18 +316,18 @@ class ChessLibGameEngine(object):
 
         # FIXME: use iswhite
         start = GameMove(
-            'Start',
-            0,
-            False,
+            self._start_name,
+            self.position.fen.full_move,
+            self.position.fen.turn == 'w',
             None,
-            self.toBoardstring(),
+            self.fen,
             None,
             None,
             None,
             None
         )
         return start
-        
+
 
 if __name__ == '__main__':
 

@@ -145,18 +145,19 @@ class PagingList(GraphicsWidget):
     def previous(self, emit=True):
         return self._get_offset(-1, emit)
    
-    def _get_idx(self, idx):
+    def _get_idx(self, idx, emit):
         enabled = [i for i in self._items if i.isEnabled()]
         if not enabled:
             return None
-        enabled[idx].itemSelected.emit(enabled[idx])
+        if emit:
+            enabled[idx].itemSelected.emit(enabled[idx])
         return enabled[idx]
 
-    def first(self):
-        return self._get_idx(0)
+    def first(self, emit=True):
+        return self._get_idx(0, emit)
 
-    def last(self):
-        return self._get_idx(-1)
+    def last(self, emit=True):
+        return self._get_idx(-1, emit)
     
     def sizeHint(self, which, constraint=None):
         size = QtCore.QSizeF(self._width, self.height)
@@ -167,7 +168,7 @@ class PagingList(GraphicsWidget):
 
 class MovePagingList(PagingList):
 
-    moveSelected = QtCore.pyqtSignal(GameMove, int)
+    move_selected = QtCore.pyqtSignal(GameMove, int)
 
     def __init__(self, width):
         super(MovePagingList, self).__init__(width)
@@ -211,24 +212,29 @@ class MovePagingList(PagingList):
             l.append(item)
         return l
 
-    def append(self, move):
+    def append(self, move, is_initial=False):
 
-        dummy = super(MovePagingList, self).pop()
+        if not is_initial:
+            dummy = super(MovePagingList, self).pop()
         item = MoveItem(move)
         item.itemSelected.connect(self.onMoveItemSelected)
         super(MovePagingList, self).append(item)
 
-        self._setDummyMove(move.movenum, move.iswhite)
+        iswhite = not move.iswhite if is_initial else move.iswhite
+        self._setDummyMove(move.movenum, iswhite, is_initial)
 
-    def _setDummyMove(self, movenum, iswhite):
+    def _setDummyMove(self, movenum, iswhite, is_initial):
 
-        if not iswhite:
+        if not iswhite and not is_initial:
             item = MovenumItem(movenum + 1)
             super(MovePagingList, self).append(item)
             item.setEnabled(False)
 
         item = MoveItem('   ')
         item.setEnabled(False)
+
+        if is_initial:
+            iswhite = iswhite
         if iswhite:
             item.setBlack()
         else:
@@ -237,25 +243,25 @@ class MovePagingList(PagingList):
 
     def newGame(self, initial_move):
 
-        #FIXME use iswhite
         self.clear()
-        self._setDummyMove(0, True)
-        self.append(initial_move)
+        self.append(initial_move, is_initial=True)
         self._last_selected = None
         self.first()
 
     def onMoveItemSelected(self, item):
         last = self._last_selected
-        diff = last and item.gamemove.halfmove - last.gamemove.halfmove
+        if not last:
+            diff = 10**10 
+        else:
+            diff = item.gamemove.halfmove - last.gamemove.halfmove
         self._last_selected = item
-
-        self.moveSelected.emit(item.gamemove, diff)
+        # qt will coerce diff into an integer
+        self.move_selected.emit(item.gamemove, diff)
 
 
 class MovesWidget(GraphicsWidget):
 
-    moveMade = QtCore.pyqtSignal(GameMove)
-    gameLoaded = QtCore.pyqtSignal()
+    move_made = QtCore.pyqtSignal(GameMove)
 
     def __init__(self, board, game_engine):
         
@@ -264,17 +270,17 @@ class MovesWidget(GraphicsWidget):
         self.game_engine = game_engine
         self.board = board
         self.move_list = MovePagingList(312)
-        self.newGame()
+        self._variations_enabled = False
 
         # signals
 
-        #board.boardChanged.connect(self.resetEngine)
-        self.move_list.moveSelected.connect(self.onMoveSelected)
+        board.editing_finished.connect(self.newGame)
+        self.move_list.move_selected.connect(self.onMoveSelected)
         self.board.new_move.connect(self.onNewMove)
 
         actions = [
-            Action(self, "New Game", settings.keys['game_new'], tr("New Game"), self.newGame, 'document-new'),
             # These can go with player.
+            #Action(self, "New Game", settings.keys['game_new'], tr("New Game"), self._onNewGame, 'document-new'),
             #Action(self, "Take Back", settings.keys['game_takeback'], tr("Take Back Move"), self.takebackMove, 'edit-delete'),
             #Action(self, "Draw", settings.keys['game_draw'], tr("Offer Draw"), self.offerDraw, 'face-plain'),
             #Action(self, "Resign", settings.keys['game_resign'], tr("Resign Game"), self.resignGame, 'face-sad'),
@@ -310,27 +316,35 @@ class MovesWidget(GraphicsWidget):
         for action in self.actions():
             action.setVisible(enabled)
 
-    def newGame(self):
+    def _onNewGame(self, button):
+        self.newGame()
 
-        self.game_engine.newGame()
+    def newGame(self, fen=None):
+
+        if fen and str(fen) == str(self.game_engine.position.fen):
+            return
+
+        if fen:
+            self.game_engine.newGame(str(fen))
+        else:
+            self.game_engine.newGame()
+
         inital = self.game_engine.initialMove()
         self.move_list.newGame(inital)
-        self.board.setBoard(self.game_engine.toBoardstring())
+        self.board.setFen(self.game_engine.fen)
     
-    def loadGame(self, moves):
+    def loadGame(self, moves, initial=None):
 
-        b = self.newGame()
-        self.move_list.newGame()
+        if initial:
+            self.newGame(inital)
+        else:
+            self.newGame()
+
         for move in moves:
             self.move_list.append(move)
-        self.gameLoaded.emit()
-        return b
 
     def setEngine(self, game_engine):
         self.game_engine = game_engine
-    
-    def resetEngine(self, boardstring):
-        self.game_engine.newGame(boardstring)
     
     def onMoveSelected(self, move, diff):
 
@@ -340,18 +354,18 @@ class MovesWidget(GraphicsWidget):
             self._move_piece(current.gamemove.reverse(), current.gamemove.captured)
 
         # one move forward from current or first move from inital
-        elif diff == 1:
+        elif diff in [0,1]:
             self._move_piece(move)
 
         # everything else
         else:
-            self.board.setBoard(move.board_after)
-
-        self.moveMade.emit(move)
+            self.board.setFen(move.fen_after)
+        self.move_made.emit(move)
 
     def _move_piece(self, move, uncapture=''):
         #We need this to check for castling moves so we can move the rook.
 
+        self.board.fen.setValue(move.fen_after)
         self.board.movePiece(move, uncapture)
         rook = self.game_engine.castleRookMove(move)
         if rook:
@@ -359,40 +373,43 @@ class MovesWidget(GraphicsWidget):
 
     def onNewMove(self, move):
 
+        current = self.move_list.current(emit=False)
+        # if we are not on the last move we are trying to make a variation
+        # or the user does not realize where the current move is
+        if current != self.move_list.last(emit=False):
+            if self._variations_enabled:
+                raise NotImplementedError()
+            else:
+                print 'variations not allowed'
+                self.lastMove()
+                return
+
         if not self.game_engine.validateMove(move):
             print 'did not validate'
             #TODO we could beep here
             return
         else:
             pass
+
         # let the engine make the move
         game_move = self.game_engine.makeMove(move)
         self.move_list.append(game_move)
-        self.next()
+        self.nextMove()
 
-    def current(self):
+    def currentMove(self):
         return self.move_list.current()
     
-    def first(self):
+    def firstMove(self):
         return self.move_list.first()
 
-    def next(self):
+    def nextMove(self):
         return self.move_list.next()
 
-    def previous(self):
+    def previousMove(self):
         return self.move_list.previous()
 
-    def last(self):
+    def lastMove(self):
         return self.move_list.last()
-
-    def offerDraw(self):
-        pass
-
-    def resignGame(self):
-        pass
-
-    def takebackMove(self):
-        pass
 
 
 
